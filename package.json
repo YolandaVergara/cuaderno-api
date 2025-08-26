@@ -17,7 +17,9 @@
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "lint": "eslint src/**/*.ts",
-    "lint:fix": "eslint src/**/*.ts --fix"
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "railway:migrate": "./scripts/railway-migrate.sh",
+    "railway:deploy": "railway up"
   },
   "engines": {
     "node": ">=20"

@@ -191,6 +191,107 @@ npm run test:watch
 npm run test:coverage
 ```
 
+## 🚀 **Despliegue en Railway**
+
+### Opción 1: Railway CLI (Recomendado)
+
+1. **Instalar Railway CLI**:
+   ```bash
+   npm install -g @railway/cli
+   ```
+
+2. **Autenticarse**:
+   ```bash
+   railway login
+   ```
+
+3. **Crear proyecto**:
+   ```bash
+   railway new
+   ```
+
+4. **Añadir servicios necesarios**:
+   ```bash
+   # PostgreSQL
+   railway add postgresql
+   
+   # Redis (plugin de la comunidad)
+   railway add redis
+   ```
+
+5. **Configurar variables de entorno**:
+   ```bash
+   railway variables set NODE_ENV=production
+   railway variables set TZ="Europe/Madrid"
+   railway variables set FLIGHT_PROVIDER_API_KEY="your_api_key"
+   ```
+
+6. **Desplegar**:
+   ```bash
+   railway up
+   ```
+
+### Opción 2: Conexión con GitHub
+
+1. **Push tu código a GitHub**:
+   ```bash
+   git add .
+   git commit -m "Ready for Railway deployment"
+   git push origin main
+   ```
+
+2. **Conectar en Railway Dashboard**:
+   - Ve a [railway.app](https://railway.app)
+   - Crea un nuevo proyecto
+   - Conecta tu repositorio de GitHub
+   - Añade PostgreSQL y Redis como servicios
+
+3. **Configurar variables de entorno** en el dashboard:
+   ```env
+   NODE_ENV=production
+   DATABASE_URL=${DATABASE_URL}  # Auto-generada por Railway
+   REDIS_URL=${REDIS_URL}        # Auto-generada por Railway
+   TZ=Europe/Madrid
+   PORT=${PORT}                  # Auto-generada por Railway
+   FLIGHT_PROVIDER_API_KEY=your_api_key_here
+   ```
+
+### Variables de Entorno para Railway
+
+Railway auto-genera algunas variables. Las que necesitas configurar manualmente:
+
+```env
+# Configuración del proveedor de vuelos
+FLIGHT_PROVIDER_API_KEY=your_api_key_here
+
+# Configuración regional
+TZ=Europe/Madrid
+
+# CORS (opcional, para dominios específicos)
+CORS_ORIGIN=https://yourdomain.com
+
+# Rate limiting (opcional)
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX=100
+```
+
+### Post-Despliegue
+
+1. **Ejecutar migraciones**:
+   ```bash
+   railway run npm run railway:migrate
+   ```
+
+2. **Verificar salud del servicio**:
+   ```bash
+   curl https://your-app.railway.app/api/health
+   ```
+
+3. **Ver logs**:
+   ```bash
+   railway logs
+   ```
+
 ## 🏭 Producción
 
 ### Variables de entorno adicionales
