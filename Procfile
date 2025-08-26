@@ -1,1 +1,1 @@
-web: node test-railway.js
+web: node server-simple.mjs
