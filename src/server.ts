@@ -7,7 +7,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.PORT || 3000;
+const PORT = parseInt(process.env.PORT || "3000", 10);
 const API_BASE = "https://aeroapi.flightaware.com/aeroapi";
 const API_KEY = process.env.FLIGHTAWARE_API_KEY;
 
@@ -125,7 +125,7 @@ app.use("*", (req, res) => {
   res.status(404).json({ error: "Not found", path: req.originalUrl });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ Server on :${PORT}`);
 });
 
