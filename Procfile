@@ -1,1 +1,1 @@
-web: node server-simple.mjs
+web: npm start

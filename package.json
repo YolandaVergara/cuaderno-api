@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "node server-simple.mjs",
     "dev": "nodemon --exec ts-node --esm src/server.ts"
   },
   "keywords": [
