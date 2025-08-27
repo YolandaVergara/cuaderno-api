@@ -4,10 +4,11 @@ const configSchema = z.object({
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  PORT: z.string().transform(val => parseInt(val, 10)).default('3000'),
+  PORT: z.string().transform(val => parseInt(val, 10)).optional(),
   FLIGHT_PROVIDER_API_URL: z.string().url().default('https://api.flightprovider.com/v1'),
   FLIGHT_PROVIDER_API_KEY: z.string().default(''),
   TZ: z.string().default('Europe/Madrid'),
+  CORS_ORIGINS: z.string().default(''),
   RATE_LIMIT_WINDOW_MS: z.string().transform(val => parseInt(val, 10)).default('900000'),
   RATE_LIMIT_MAX: z.string().transform(val => parseInt(val, 10)).default('100'),
 });
@@ -32,7 +33,7 @@ export { cfg };
 
 // Legacy export for compatibility
 export const config = {
-  port: cfg.PORT,
+  port: cfg.PORT || (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000),
   nodeEnv: cfg.NODE_ENV,
   databaseUrl: cfg.DATABASE_URL,
   redisUrl: cfg.REDIS_URL,
@@ -41,6 +42,7 @@ export const config = {
     apiKey: cfg.FLIGHT_PROVIDER_API_KEY,
   },
   timezone: cfg.TZ,
+  corsOrigins: cfg.CORS_ORIGINS.split(',').map(o => o.trim()).filter(Boolean),
   rateLimit: {
     windowMs: cfg.RATE_LIMIT_WINDOW_MS,
     max: cfg.RATE_LIMIT_MAX,

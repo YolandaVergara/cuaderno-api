@@ -14,12 +14,33 @@ import { errorHandler, notFoundHandler } from './middleware/error.middleware';
 // Cargar variables de entorno
 dotenv.config();
 
+
 const app = express();
+
+// Si usas proxy/CDN (Railway, Vercel, Cloudflare, etc.), activa trust proxy
+if (process.env.TRUST_PROXY === '1' || process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 
 // Middleware de seguridad
 app.use(helmet());
+
+// CORS seguro: permite solo orígenes definidos en producción
+const allowedOrigins = (process.env.CORS_ORIGIN || '').split(',').map(o => o.trim()).filter(Boolean);
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: (origin, callback) => {
+    // En desarrollo o si no hay origin (ej: Postman), permitir
+    if (process.env.NODE_ENV === 'development' || !origin) {
+      callback(null, true);
+    } else if (allowedOrigins.length === 0) {
+      // En prod sin CORS_ORIGIN configurado, rechazar
+      callback(new Error('CORS_ORIGIN not configured in production'));
+    } else if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 
@@ -38,7 +59,9 @@ app.use(limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+
 // Logging de requests
+// Asegúrate de que el logger solo escriba a consola en producción (no a disco)
 app.use((req, res, next) => {
   logger.info('Request received', {
     method: req.method,
@@ -55,21 +78,16 @@ app.get('/health', async (_req, res) => {
     // Verificar DB (obligatorio)
     await prisma.$queryRaw`SELECT 1`;
     
-    // Verificar Redis (opcional en producción)
-    let redisStatus = "DISCONNECTED";
-    try {
-      await connection.ping();
-      redisStatus = "CONNECTED";
-    } catch (redisError) {
-      logger.warn('Redis not available in health check', { error: (redisError as Error).message });
-    }
+    // Verificar Redis (obligatorio)
+    await connection.ping();
     
+    // Solo devolver 200 si AMBOS están OK
     res.status(200).json({ 
       status: "HEALTHY",
-      redis: redisStatus, 
+      redis: "CONNECTED", 
       db: "CONNECTED",
       timestamp: new Date().toISOString(),
-      version: "2.0.0-REDIS-OPTIONAL" 
+      version: "2.0.0-PRIVATE-DUAL-STACK" 
     });
   } catch (e) {
     res.status(503).json({ 
@@ -194,15 +212,32 @@ app.use(errorHandler);
 
 async function startServer(): Promise<void> {
   try {
-    // Inicializar Redis y workers de forma explícita
+    // Log DATABASE_URL host for debugging (masked for security)
+    const dbUrl = process.env.DATABASE_URL || '';
+    const dbHost = dbUrl.match(/@([^:\/]+)/)?.[1] || 'unknown';
+    logger.info('Database connection info', { 
+      host: dbHost.replace(/\./g, '***'), // Mask for security
+      isRailwayInternal: dbHost.includes('railway.internal')
+    });
+
+    // Execute migrations in production (only on API service)
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        logger.info('Running database migrations...');
+        const { execSync } = await import('child_process');
+        execSync('npx prisma migrate deploy', { stdio: 'inherit' });
+        logger.info('Database migrations completed successfully');
+      } catch (migrationError) {
+        logger.error('Migration failed', { error: (migrationError as Error).message });
+        // Don't exit - let the app try to start anyway in case migrations were already applied
+      }
+    }
+
+    // Solo verificar Redis, NO inicializar worker (servicio separado)
     try {
       await connection.ping();
       logger.info('Redis connection verified successfully');
-      
-      // Importar e inicializar worker (esto activa el polling automático)
-      const { initializeWorker } = await import('./infra/redis');
-      await initializeWorker();
-      logger.info('Redis worker initialized');
+      logger.info('Web service ready - worker runs separately');
     } catch (redisError) {
       logger.warn('Redis not available - polling disabled', { error: (redisError as Error).message });
     }
@@ -217,25 +252,27 @@ async function startServer(): Promise<void> {
     });
 
     // Graceful shutdown
-    process.on('SIGTERM', async () => {
-      logger.info('SIGTERM received, shutting down gracefully');
+    const shutdown = async (signal: string) => {
+      logger.info(`${signal} received, shutting down web service gracefully`);
       
       server.close(async () => {
-        await connection.disconnect();
-        await prisma.$disconnect();
-        process.exit(0);
+        try {
+          await connection.disconnect();
+          logger.info('Redis disconnected');
+          
+          await prisma.$disconnect();
+          logger.info('Database disconnected');
+          
+          process.exit(0);
+        } catch (error) {
+          logger.error('Error during shutdown', { error });
+          process.exit(1);
+        }
       });
-    });
+    };
 
-    process.on('SIGINT', async () => {
-      logger.info('SIGINT received, shutting down gracefully');
-      
-      server.close(async () => {
-        await connection.disconnect();
-        await prisma.$disconnect();
-        process.exit(0);
-      });
-    });
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
 
   } catch (error) {
     logger.error('Failed to start server', { error });

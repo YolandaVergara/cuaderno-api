@@ -12,12 +12,23 @@ logger.info('Initializing Redis connection', {
   urlLength: Env.REDIS_URL?.length 
 });
 
-// Un único objeto de conexión compartido por BullMQ con configuración robusta
-export const connection = new IORedis(Env.REDIS_URL, {
+// Parsear la URL de Redis para extraer componentes
+const redisUrl = new URL(Env.REDIS_URL);
+
+// Configuración de conexión con family: 0 para dual-stack (IPv4/IPv6)
+const connectionConfig = {
+  family: 0,                    // <- clave para dual-stack
+  host: redisUrl.hostname,
+  port: Number(redisUrl.port),
+  username: redisUrl.username,
+  password: redisUrl.password,
   maxRetriesPerRequest: null,
   enableReadyCheck: false,
   lazyConnect: true,
-});
+};
+
+// Un único objeto de conexión compartido por BullMQ con configuración robusta
+export const connection = new IORedis(connectionConfig);
 
 connection.on('error', (error) => {
   logger.error('Redis connection error:', { 
@@ -45,9 +56,9 @@ connection.on('reconnecting', () => {
   logger.info('Redis reconnecting...');
 });
 
-// Colas / worker usan la misma 'connection'
-export const pollQueue = new Queue("flight-poll", { connection });
-export const pollEvents = new QueueEvents("flight-poll", { connection });
+// Colas / worker usan la misma configuración de conexión
+export const pollQueue = new Queue("flight-poll", { connection: connectionConfig });
+export const pollEvents = new QueueEvents("flight-poll", { connection: connectionConfig });
 
 // Función para calcular el próximo delay
 function nextDelayMs(now: Date, sched: Date): number {
@@ -195,7 +206,7 @@ export const pollWorker = new Worker("flight-poll", async (job) => {
     });
     throw error; // Para que BullMQ maneje el retry
   }
-}, { connection });
+}, { connection: connectionConfig });
 
 pollWorker.on('completed', (job) => {
   logger.info('Flight polling job completed', { jobId: job.id });
