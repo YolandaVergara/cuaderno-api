@@ -4,7 +4,7 @@ const configSchema = z.object({
   port: z.number().default(3000),
   nodeEnv: z.enum(['development', 'production', 'test']).default('development'),
   databaseUrl: z.string(),
-  redisUrl: z.string(),
+  redisUrl: z.string().optional(), // Hacer Redis opcional
   flightProvider: z.object({
     apiUrl: z.string(),
     apiKey: z.string(),
@@ -21,8 +21,8 @@ export type Config = z.infer<typeof configSchema>;
 export const config: Config = configSchema.parse({
   port: parseInt(process.env.PORT || '3000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
-  databaseUrl: process.env.DATABASE_URL,
-  redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
+  databaseUrl: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/cuaderno_api',
+  redisUrl: process.env.REDIS_URL || '', // Vacío por defecto para evitar errores
   flightProvider: {
     apiUrl: process.env.FLIGHT_PROVIDER_API_URL || 'https://api.flightprovider.com/v1',
     apiKey: process.env.FLIGHT_PROVIDER_API_KEY || '',
