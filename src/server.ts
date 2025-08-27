@@ -48,6 +48,16 @@ app.use((req, res, next) => {
   next();
 });
 
+// Health check endpoint (antes de las rutas de la API)
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    service: 'cuaderno-api',
+    version: '1.0.0',
+  });
+});
+
 // Rutas de la API
 app.use('/api', apiRoutes);
 

@@ -1,4 +1,25 @@
-import { Notification, NotificationType } from '@prisma/client';
+// Define Notification type locally if not available from another module
+export type Notification = {
+  id: string;
+  userId: string;
+  flightTrackingId: string;
+  type: string;
+  title: string;
+  message: string;
+  data: any;
+  isRead: boolean;
+  createdAt: Date;
+  // Add other fields as needed based on your Prisma schema
+};
+
+// Define NotificationType enum locally if not available from another module
+export enum NotificationType {
+  STATUS_CHANGE = 'STATUS_CHANGE',
+  GATE_CHANGE = 'GATE_CHANGE',
+  TERMINAL_CHANGE = 'TERMINAL_CHANGE',
+  DELAY_CHANGE = 'DELAY_CHANGE',
+  FLIGHT_CANCELLED = 'FLIGHT_CANCELLED',
+}
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 import { FlightChange, NotificationData } from '../types/flight';

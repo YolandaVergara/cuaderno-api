@@ -11,8 +11,6 @@ yarn-error.log*
 .env.test
 
 # Development files
-src/
-*.ts
 !dist/
 
 # Tests
@@ -23,7 +21,6 @@ jest.config.js
 
 # Development tools
 .eslintrc.js
-tsconfig.json
 docker-compose.yml
 scripts/
 

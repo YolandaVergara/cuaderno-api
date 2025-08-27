@@ -1,15 +1,16 @@
-import { FlightTracking, FlightStatus, StopReason } from '@prisma/client';
 import { prisma } from '../config/database';
+import type { FlightTracking } from '../../node_modules/.prisma/client';
+import { $Enums } from '../../node_modules/.prisma/client';
 import { logger } from '../config/logger';
 import { FlightData, FlightChangeDetection, NotificationType } from '../types/flight';
 import { calculatePollingInterval, calculateNextPollDate, shouldStopPolling } from '../utils/polling';
 import { IFlightProvider } from './flight-provider.service';
-import { NotificationService } from './notification.service';
+// import { NotificationService } from './notification.service'; // Temporalmente comentado
 
 export class FlightTrackingService {
   constructor(
     private flightProvider: IFlightProvider,
-    private notificationService: NotificationService
+    private notificationService: any // Temporalmente any
   ) {}
 
   /**
@@ -48,7 +49,7 @@ export class FlightTrackingService {
           scheduledDeparture: flightData.scheduledDeparture,
           origin: flightData.origin,
           destination: flightData.destination,
-          status: FlightStatus.SCHEDULED,
+          status: $Enums.FlightStatus.SCHEDULED,
           gate: flightData.gate,
           terminal: flightData.terminal,
           delay: 0,
@@ -111,7 +112,7 @@ export class FlightTrackingService {
       // Verificar si debe parar el polling
       const stopCheck = shouldStopPolling(tracking.scheduledDeparture, tracking.status);
       if (stopCheck.shouldStop) {
-        await this.stopFlightTracking(trackingId, stopCheck.reason as StopReason);
+        await this.stopFlightTracking(trackingId, stopCheck.reason as $Enums.StopReason);
         return;
       }
 
@@ -209,7 +210,7 @@ export class FlightTrackingService {
     }
 
     // Cancelación
-    if (newData.status === FlightStatus.CANCELLED && currentTracking.status !== FlightStatus.CANCELLED) {
+    if (newData.status === $Enums.FlightStatus.CANCELLED && currentTracking.status !== $Enums.FlightStatus.CANCELLED) {
       changes.push({
         type: NotificationType.FLIGHT_CANCELLED,
         field: 'status',
@@ -301,7 +302,7 @@ export class FlightTrackingService {
   /**
    * Detiene el seguimiento de un vuelo
    */
-  async stopFlightTracking(trackingId: string, reason: StopReason): Promise<void> {
+  async stopFlightTracking(trackingId: string, reason: $Enums.StopReason): Promise<void> {
     try {
       await prisma.flightTracking.update({
         where: { id: trackingId },
@@ -332,7 +333,7 @@ export class FlightTrackingService {
         },
         data: {
           isActive: false,
-          stopReason: StopReason.USER_CANCELLED,
+          stopReason: $Enums.StopReason.USER_CANCELLED,
           updatedAt: new Date(),
         },
       });
