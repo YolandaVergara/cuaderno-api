@@ -26,6 +26,22 @@ services:
     networks:
       - cuaderno-network
 
+  api:
+    build: .
+    container_name: cuaderno-api
+    environment:
+      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/cuaderno_api?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      NODE_ENV: development
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - cuaderno-network
+
 volumes:
   postgres_data:
   redis_data:

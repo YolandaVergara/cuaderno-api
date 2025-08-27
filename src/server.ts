@@ -6,9 +6,10 @@ import dotenv from 'dotenv';
 
 import { config } from './config/config';
 import { logger } from './config/logger';
+import { prisma } from './config/database';
+import { connection } from './infra/redis';
 import { apiRoutes } from './routes';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware';
-import { JobManager } from './jobs/job-manager';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -48,14 +49,140 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check endpoint (antes de las rutas de la API)
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    service: 'cuaderno-api',
-    version: '1.0.0',
+// Health check endpoint con verificación de DB y Redis
+app.get('/health', async (_req, res) => {
+  try {
+    // Verificar DB (obligatorio)
+    await prisma.$queryRaw`SELECT 1`;
+    
+    // Verificar Redis (opcional en producción)
+    let redisStatus = "DISCONNECTED";
+    try {
+      await connection.ping();
+      redisStatus = "CONNECTED";
+    } catch (redisError) {
+      logger.warn('Redis not available in health check', { error: (redisError as Error).message });
+    }
+    
+    res.status(200).json({ 
+      status: "HEALTHY",
+      redis: redisStatus, 
+      db: "CONNECTED",
+      timestamp: new Date().toISOString(),
+      version: "2.0.0-REDIS-OPTIONAL" 
+    });
+  } catch (e) {
+    res.status(503).json({ 
+      status: "UNHEALTHY",
+      error: (e as Error).message,
+      timestamp: new Date().toISOString() 
+    });
+  }
+});
+
+// Alternative health check endpoint for testing
+app.get('/health-test', async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    await connection.ping();
+    res.status(200).json({ 
+      message: "TEST ENDPOINT WORKING", 
+      redis: "ok", 
+      db: "ok", 
+      test: "working",
+      timestamp: new Date().toISOString() 
+    });
+  } catch (e) {
+    res.status(503).json({ ok: false, error: (e as Error).message });
+  }
+});
+
+// Test endpoint para crear un seguimiento de vuelo
+app.post('/test/flight-tracking', async (req, res) => {
+  try {
+    const { flightId, hours = 24 } = req.body;
+    
+    // Crear fecha de vuelo en el futuro
+    const scheduledDeparture = new Date();
+    scheduledDeparture.setHours(scheduledDeparture.getHours() + parseInt(hours));
+    
+    // Crear tracking mock
+    const mockTracking = {
+      id: `test-tracking-${Date.now()}`,
+      userId: 'test-user',
+      flightId: flightId || `TEST${Math.floor(Math.random() * 1000)}`,
+      airline: 'TEST Airlines',
+      flightNumber: 'TE123',
+      scheduledDeparture,
+      origin: 'MAD',
+      destination: 'BCN'
+    };
+    
+    // Programar job de polling
+    const { scheduleNext } = await import('./infra/redis');
+    await scheduleNext({
+      userId: mockTracking.userId,
+      flightId: mockTracking.flightId,
+      trackingId: mockTracking.id,
+      scheduledAt: scheduledDeparture.toISOString()
+    });
+    
+    res.json({
+      message: 'Test flight tracking created and job scheduled',
+      tracking: mockTracking,
+      scheduledDeparture: scheduledDeparture.toISOString(),
+      hoursUntilFlight: hours
+    });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// Test endpoints para verificar rutas sin autenticación
+app.get('/test/routes', (req, res) => {
+  res.json({
+    message: 'Routes test endpoint working',
+    availableRoutes: [
+      'GET /health',
+      'GET /health-test', 
+      'POST /test/flight-tracking',
+      'GET /test/routes',
+      'GET /test/redis',
+      'GET /api/flight/:flightId (requires auth)',
+      'POST /api/flight/:flightId/follow (requires auth)',
+      'GET /api/notifications (requires auth)'
+    ]
   });
+});
+
+// Test endpoint para verificar Redis
+app.get('/test/redis', async (req, res) => {
+  try {
+    const startTime = Date.now();
+    await connection.ping();
+    const responseTime = Date.now() - startTime;
+    
+    res.json({ 
+      message: 'Redis connection test successful',
+      status: 'connected',
+      responseTimeMs: responseTime,
+      redisUrl: process.env.REDIS_URL ? 'configured' : 'missing',
+      timestamp: new Date().toISOString()
+    });
+  } catch (e) {
+    res.status(500).json({ 
+      message: 'Redis connection test failed',
+      status: 'disconnected',
+      error: (e as Error).message,
+      redisUrl: process.env.REDIS_URL ? 'configured' : 'missing',
+      errorDetails: {
+        code: (e as any).code,
+        errno: (e as any).errno,
+        hostname: (e as any).hostname
+      },
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // Rutas de la API
@@ -65,27 +192,27 @@ app.use('/api', apiRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-// Inicializar job manager
-let jobManager: JobManager;
-
 async function startServer(): Promise<void> {
   try {
-    // Intentar inicializar job manager, pero no fallar si Redis no está disponible
+    // Inicializar Redis y workers de forma explícita
     try {
-      jobManager = new JobManager();
-      // Programar jobs iniciales para vuelos existentes
-      await jobManager.schedulePollingJobs();
-      logger.info('JobManager initialized successfully');
-    } catch (error) {
-      logger.warn('Failed to initialize JobManager (Redis might not be available):', error);
-      // Continuar sin JobManager - la aplicación funcionará sin jobs
+      await connection.ping();
+      logger.info('Redis connection verified successfully');
+      
+      // Importar e inicializar worker (esto activa el polling automático)
+      const { initializeWorker } = await import('./infra/redis');
+      await initializeWorker();
+      logger.info('Redis worker initialized');
+    } catch (redisError) {
+      logger.warn('Redis not available - polling disabled', { error: (redisError as Error).message });
     }
     
-    const server = app.listen(config.port, () => {
+    const server = app.listen(config.port, '0.0.0.0', () => {
       logger.info('Server started', {
         port: config.port,
         nodeEnv: config.nodeEnv,
         timezone: config.timezone,
+        host: '0.0.0.0'
       });
     });
 
@@ -94,9 +221,8 @@ async function startServer(): Promise<void> {
       logger.info('SIGTERM received, shutting down gracefully');
       
       server.close(async () => {
-        if (jobManager) {
-          await jobManager.close();
-        }
+        await connection.disconnect();
+        await prisma.$disconnect();
         process.exit(0);
       });
     });
@@ -105,9 +231,8 @@ async function startServer(): Promise<void> {
       logger.info('SIGINT received, shutting down gracefully');
       
       server.close(async () => {
-        if (jobManager) {
-          await jobManager.close();
-        }
+        await connection.disconnect();
+        await prisma.$disconnect();
         process.exit(0);
       });
     });

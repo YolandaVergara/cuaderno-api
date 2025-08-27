@@ -1,5 +1,5 @@
 import { Queue, Worker, Job } from 'bullmq';
-import { redis } from '../config/redis';
+import { connection } from '../infra/redis';
 import { logger } from '../config/logger';
 import { FlightTrackingService } from '../services/flight-tracking.service';
 import { NotificationService } from '../services/notification.service';
@@ -25,10 +25,10 @@ export class JobManager {
     this.flightTrackingService = new FlightTrackingService(flightProvider, this.notificationService);
 
     // Solo inicializar colas si Redis está disponible
-    if (redis) {
+    if (connection) {
       try {
         this.flightPollingQueue = new Queue<FlightPollingJobData>('flight-polling', {
-          connection: redis as any,
+          connection: connection as any,
           defaultJobOptions: {
             removeOnComplete: 100,
             removeOnFail: 50,
@@ -41,7 +41,7 @@ export class JobManager {
         });
 
         this.cleanupQueue = new Queue('cleanup', {
-          connection: redis as any,
+          connection: connection as any,
           defaultJobOptions: {
             removeOnComplete: 10,
             removeOnFail: 5,
@@ -64,7 +64,7 @@ export class JobManager {
   }
 
   private initializeWorkers(): void {
-    if (!this.isRedisAvailable || !redis) return;
+    if (!this.isRedisAvailable || !connection) return;
 
     // Worker para polling de vuelos
     new Worker<FlightPollingJobData>(
@@ -78,24 +78,20 @@ export class JobManager {
         // TODO: Implementar await this.flightTrackingService.pollFlightUpdate(trackingId);
       },
       {
-        connection: redis as any,
+        connection: connection as any,
         concurrency: 5,
       }
     );
 
-    // Worker para cleanup
+    // Worker para limpieza
     new Worker(
       'cleanup',
       async (job: Job) => {
-        logger.info('Processing cleanup job', { type: job.name });
-
-        if (job.name === 'cleanup-inactive') {
-          await this.cleanupInactiveTrackings();
-        }
+        logger.info('Processing cleanup job', { jobId: job.id });
+        // TODO: Implementar lógica de limpieza
       },
       {
-        connection: redis as any,
-        concurrency: 1,
+        connection: connection as any,
       }
     );
 

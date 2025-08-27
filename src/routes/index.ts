@@ -5,16 +5,7 @@ import { notificationRoutes } from './notification.routes';
 const router = Router();
 
 // Rutas de la API
-router.use('/flights', flightRoutes);
+router.use('/flight', flightRoutes);  // Cambiado a singular como especifica el requirement
 router.use('/notifications', notificationRoutes);
-
-// Ruta de health check
-router.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    service: 'cuaderno-api',
-  });
-});
 
 export { router as apiRoutes };

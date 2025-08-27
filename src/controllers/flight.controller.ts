@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { ValidatedRequest } from '../middleware/validation.middleware';
 import { RegisterFlightTrackingInput, CancelTrackingInput } from '../types/validation';
 import { FlightTrackingService } from '../services/flight-tracking.service';
@@ -161,9 +161,61 @@ export class FlightController {
   }
 
   /**
-   * Obtiene el estado actual de un vuelo específico
+   * Obtiene información de un vuelo específico
    */
-  async getFlightStatus(req: any, res: Response): Promise<void> {
+  async getFlightInfo(req: any, res: Response): Promise<void> {
+    try {
+      const { flightId } = req.params;
+      const userId = req.userId;
+      
+      // Buscar tracking del usuario para este vuelo
+      const tracking = await this.flightTrackingService.getUserFlightTracking(userId, flightId);
+      
+      if (!tracking) {
+        res.status(404).json({
+          error: 'Flight tracking not found',
+          message: 'Flight is not being tracked by this user',
+        });
+        return;
+      }
+
+      res.json({
+        message: 'Flight information retrieved successfully',
+        data: {
+          trackingId: tracking.id,
+          flightId: tracking.flightId,
+          flightNumber: tracking.flightNumber,
+          airline: tracking.airline,
+          origin: tracking.origin,
+          destination: tracking.destination,
+          scheduledDeparture: tracking.scheduledDeparture,
+          status: tracking.status,
+          gate: tracking.gate,
+          terminal: tracking.terminal,
+          delay: tracking.delay,
+          createdAt: tracking.createdAt,
+          updatedAt: tracking.updatedAt,
+          lastPolledAt: tracking.lastPolledAt,
+          nextPollAt: tracking.nextPollAt,
+          pollInterval: tracking.pollInterval,
+          retryCount: tracking.retryCount,
+          isActive: tracking.isActive,
+          stopReason: tracking.stopReason,
+        },
+      });
+    } catch (error) {
+      logger.error('Error getting flight info', { error });
+      res.status(500).json({
+        error: 'Failed to get flight information',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * Obtiene el estado actual de un vuelo
+   */
+  async getFlightStatus(req: Request, res: Response): Promise<void> {
     try {
       const { flightId } = req.params;
       const flightProvider = createFlightProvider();

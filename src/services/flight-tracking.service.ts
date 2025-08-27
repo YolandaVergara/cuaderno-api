@@ -365,4 +365,22 @@ export class FlightTrackingService {
       throw error;
     }
   }
+
+  /**
+   * Obtiene un tracking específico de un usuario por flightId
+   */
+  async getUserFlightTracking(userId: string, flightId: string): Promise<FlightTracking | null> {
+    try {
+      return await prisma.flightTracking.findFirst({
+        where: {
+          userId,
+          flightId,
+          isActive: true,
+        },
+      });
+    } catch (error) {
+      logger.error('Error getting user flight tracking', { userId, flightId, error });
+      throw error;
+    }
+  }
 }

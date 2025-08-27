@@ -14,35 +14,35 @@ const flightController = new FlightController();
 router.use(authenticateUser);
 
 /**
- * POST /api/flights/track
+ * GET /api/flight/:flightId
+ * Obtiene información completa de un vuelo específico
+ */
+router.get('/:flightId', (req: any, res: any) => flightController.getFlightInfo(req, res));
+
+/**
+ * POST /api/flight/:flightId/follow
  * Registra un vuelo para seguimiento
  */
 router.post(
-  '/track',
+  '/:flightId/follow',
   validateRequest(RegisterFlightTrackingSchema),
   (req: any, res: any) => flightController.registerFlightTracking(req, res)
 );
 
 /**
- * GET /api/flights/trackings
- * Obtiene todos los seguimientos activos del usuario
- */
-router.get('/trackings', (req: any, res: any) => flightController.getUserFlightTrackings(req, res));
-
-/**
- * DELETE /api/flights/trackings/:trackingId
+ * DELETE /api/flight/:flightId/follow
  * Cancela el seguimiento de un vuelo
  */
 router.delete(
-  '/trackings/:trackingId',
+  '/:flightId/follow',
   validateRequest(CancelTrackingSchema),
   (req: any, res: any) => flightController.cancelFlightTracking(req, res)
 );
 
 /**
- * GET /api/flights/:flightId/status
- * Obtiene el estado actual de un vuelo específico
+ * GET /api/flight/trackings
+ * Obtiene todos los seguimientos activos del usuario
  */
-router.get('/:flightId/status', (req: any, res: any) => flightController.getFlightStatus(req, res));
+router.get('/trackings', (req: any, res: any) => flightController.getUserFlightTrackings(req, res));
 
 export { router as flightRoutes };
