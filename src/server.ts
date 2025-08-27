@@ -78,7 +78,7 @@ async function startServer(): Promise<void> {
       logger.info('JobManager initialized successfully');
     } catch (error) {
       logger.warn('Failed to initialize JobManager (Redis might not be available):', error);
-      logger.info('Server will continue without job scheduling');
+      // Continuar sin JobManager - la aplicación funcionará sin jobs
     }
     
     const server = app.listen(config.port, () => {

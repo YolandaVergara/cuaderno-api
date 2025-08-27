@@ -2,26 +2,38 @@ import Redis from 'ioredis';
 import { config } from './config';
 import { logger } from './logger';
 
-export const redis = new Redis(config.redisUrl, {
-  enableReadyCheck: false,
-  maxRetriesPerRequest: null,
-  lazyConnect: true,
-  connectTimeout: 10000,
-  commandTimeout: 10000,
-});
+let redis: Redis | null = null;
 
-redis.on('error', (error) => {
-  logger.error('Redis connection error:', error.message);
-});
+// Solo intentar conectar a Redis si la URL no es la default de localhost
+if (config.redisUrl && !config.redisUrl.includes('localhost') && config.nodeEnv === 'production') {
+  try {
+    redis = new Redis(config.redisUrl, {
+      enableReadyCheck: false,
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+      connectTimeout: 5000,
+      commandTimeout: 5000,
+    });
 
-redis.on('connect', () => {
-  logger.info('Redis connected successfully');
-});
+    redis.on('error', (error) => {
+      logger.error('Redis connection error:', error);
+      // No hacer crash de la app por Redis
+    });
 
-redis.on('ready', () => {
-  logger.info('Redis is ready to receive commands');
-});
+    redis.on('connect', () => {
+      logger.info('Redis connected successfully');
+    });
 
-redis.on('close', () => {
-  logger.warn('Redis connection closed');
-});
+    redis.on('close', () => {
+      logger.warn('Redis connection closed');
+    });
+
+  } catch (error) {
+    logger.error('Failed to initialize Redis:', error);
+    redis = null;
+  }
+} else {
+  logger.info('Redis not configured or in development mode - running without Redis');
+}
+
+export { redis };

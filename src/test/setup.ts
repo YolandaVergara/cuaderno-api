@@ -10,7 +10,9 @@ beforeAll(async () => {
 afterAll(async () => {
   // Limpiar y cerrar conexiones
   await prisma.$disconnect();
-  await redis.disconnect();
+  if (redis) {
+    await redis.disconnect();
+  }
 });
 
 beforeEach(async () => {
