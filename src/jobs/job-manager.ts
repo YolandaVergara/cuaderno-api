@@ -23,30 +23,37 @@ export class JobManager {
     this.notificationService = new NotificationService();
     this.flightTrackingService = new FlightTrackingService(flightProvider, this.notificationService);
 
-    // Inicializar colas
-    this.flightPollingQueue = new Queue<FlightPollingJobData>('flight-polling', {
-      connection: redis,
-      defaultJobOptions: {
-        removeOnComplete: 100,
-        removeOnFail: 50,
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 2000,
+    // Inicializar colas con manejo de errores
+    try {
+      this.flightPollingQueue = new Queue<FlightPollingJobData>('flight-polling', {
+        connection: redis,
+        defaultJobOptions: {
+          removeOnComplete: 100,
+          removeOnFail: 50,
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000,
+          },
         },
-      },
-    });
+      });
 
-    this.cleanupQueue = new Queue('cleanup', {
-      connection: redis,
-      defaultJobOptions: {
-        removeOnComplete: 10,
-        removeOnFail: 5,
-      },
-    });
+      this.cleanupQueue = new Queue('cleanup', {
+        connection: redis,
+        defaultJobOptions: {
+          removeOnComplete: 10,
+          removeOnFail: 5,
+        },
+      });
 
-    this.initializeWorkers();
-    this.scheduleCleanupJobs();
+      this.initializeWorkers();
+      this.scheduleCleanupJobs();
+      
+      logger.info('JobManager initialized successfully');
+    } catch (error) {
+      logger.error('Failed to initialize JobManager:', error);
+      throw error;
+    }
   }
 
   /**

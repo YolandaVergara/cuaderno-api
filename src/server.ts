@@ -70,11 +70,16 @@ let jobManager: JobManager;
 
 async function startServer(): Promise<void> {
   try {
-    // Inicializar job manager
-    jobManager = new JobManager();
-    
-    // Programar jobs iniciales para vuelos existentes
-    await jobManager.schedulePollingJobs();
+    // Intentar inicializar job manager, pero no fallar si Redis no está disponible
+    try {
+      jobManager = new JobManager();
+      // Programar jobs iniciales para vuelos existentes
+      await jobManager.schedulePollingJobs();
+      logger.info('JobManager initialized successfully');
+    } catch (error) {
+      logger.warn('Failed to initialize JobManager (Redis might not be available):', error);
+      logger.info('Server will continue without job scheduling');
+    }
     
     const server = app.listen(config.port, () => {
       logger.info('Server started', {
