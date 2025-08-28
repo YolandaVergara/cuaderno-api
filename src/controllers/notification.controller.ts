@@ -40,7 +40,8 @@ export class NotificationController {
           type: notification.type,
           title: notification.title,
           message: notification.message,
-          data: notification.data,
+          meta: (notification as any).data, // Map data to meta for consistency
+          data: (notification as any).data, // Keep data for backward compatibility
           isRead: notification.isRead,
           createdAt: notification.createdAt,
           flight: {

@@ -10,6 +10,7 @@ import { prisma } from './config/database';
 import { connection } from './infra/redis';
 import { apiRoutes } from './routes';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware';
+import { notificationsSse } from './sse/notifications.sse';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -166,6 +167,9 @@ app.get('/test/routes', (req, res) => {
       'POST /test/flight-tracking',
       'GET /test/routes',
       'GET /test/redis',
+      'GET /api/push/public-key',
+      'POST /api/push/subscribe',
+      'POST /api/push/test',
       'GET /api/flight/:flightId (requires auth)',
       'POST /api/flight/:flightId/follow (requires auth)',
       'GET /api/notifications (requires auth)'
@@ -201,6 +205,15 @@ app.get('/test/redis', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   }
+});
+
+// SSE endpoints (ANTES de las rutas API)
+app.head('/api/notifications/stream', (_req, res) => res.sendStatus(200));
+app.get('/api/notifications/stream', notificationsSse);
+
+// Debug endpoint to test SSE route
+app.get('/debug/sse-test', (_req, res) => {
+  res.json({ message: 'SSE debug endpoint working', timestamp: new Date().toISOString() });
 });
 
 // Rutas de la API

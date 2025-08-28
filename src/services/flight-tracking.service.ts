@@ -5,12 +5,12 @@ import { logger } from '../config/logger';
 import { FlightData, FlightChangeDetection, NotificationType } from '../types/flight';
 import { calculatePollingInterval, calculateNextPollDate, shouldStopPolling } from '../utils/polling';
 import { IFlightProvider } from './flight-provider.service';
-// import { NotificationService } from './notification.service'; // Temporalmente comentado
+import { NotificationService } from './notification.service';
 
 export class FlightTrackingService {
   constructor(
     private flightProvider: IFlightProvider,
-    private notificationService: any // Temporalmente any
+    private notificationService: NotificationService
   ) {}
 
   /**
@@ -58,11 +58,36 @@ export class FlightTrackingService {
         },
       });
 
+      // Check if flight is already within 6 hours - create upcoming notification immediately
+      const hoursUntilDeparture = (flightData.scheduledDeparture.getTime() - Date.now()) / (1000 * 60 * 60);
+      if (hoursUntilDeparture <= 6 && hoursUntilDeparture > 0) {
+        logger.info('Flight is within 6h threshold, creating UPCOMING notification', {
+          userId,
+          flightId: tracking.flightId,
+          hoursUntilDeparture
+        });
+
+        await this.notificationService.createUpcomingFlightNotification(userId, {
+          id: tracking.id,
+          flightId: tracking.flightId,
+          flightNumber: tracking.flightNumber,
+          airline: tracking.airline,
+          origin: tracking.origin,
+          destination: tracking.destination,
+          scheduledDeparture: tracking.scheduledDeparture,
+          status: tracking.status,
+          gate: tracking.gate || undefined,
+          terminal: tracking.terminal || undefined,
+          delay: tracking.delay
+        });
+      }
+
       logger.info('Flight tracking registered', {
         userId,
         flightId: flightData.flightId,
         nextPollAt,
         interval,
+        upcomingNotificationCreated: hoursUntilDeparture <= 6
       });
 
       return tracking;
@@ -109,6 +134,33 @@ export class FlightTrackingService {
         return;
       }
 
+      // Check if we just crossed the 6h threshold (for UPCOMING notification)
+      const hoursUntilDeparture = (tracking.scheduledDeparture.getTime() - Date.now()) / (1000 * 60 * 60);
+      const wasOver6h = tracking.pollInterval === 6 * 60 * 60 || tracking.pollInterval === 1 * 60 * 60; // Was in 6h or 1h interval
+      const isNowUnder6h = hoursUntilDeparture <= 6;
+
+      if (wasOver6h && isNowUnder6h && hoursUntilDeparture > 0) {
+        logger.info('Crossed T-6h threshold, creating UPCOMING notification', {
+          trackingId,
+          flightId: tracking.flightId,
+          hoursUntilDeparture
+        });
+
+        await this.notificationService.createUpcomingFlightNotification(tracking.userId, {
+          id: tracking.id,
+          flightId: tracking.flightId,
+          flightNumber: tracking.flightNumber,
+          airline: tracking.airline,
+          origin: tracking.origin,
+          destination: tracking.destination,
+          scheduledDeparture: tracking.scheduledDeparture,
+          status: tracking.status,
+          gate: tracking.gate || undefined,
+          terminal: tracking.terminal || undefined,
+          delay: tracking.delay
+        });
+      }
+
       // Verificar si debe parar el polling
       const stopCheck = shouldStopPolling(tracking.scheduledDeparture, tracking.status);
       if (stopCheck.shouldStop) {
@@ -124,14 +176,34 @@ export class FlightTrackingService {
         return;
       }
 
-      // Detectar cambios
+      // Store old data for change detection
+      const oldData = {
+        status: tracking.status,
+        gate: tracking.gate || undefined,
+        terminal: tracking.terminal || undefined,
+        delay: tracking.delay
+      };
+
+      const newData = {
+        status: response.data.status,
+        gate: response.data.gate,
+        terminal: response.data.terminal,
+        delay: response.data.delay
+      };
+
+      // Detectar cambios (legacy method)
       const changeDetection = this.detectFlightChanges(tracking, response.data);
 
-      // Actualizar tracking con nuevos datos
-      await this.updateFlightTracking(tracking, response.data, changeDetection);
-
-      // Crear notificaciones si hay cambios significativos
-      if (changeDetection.hasChanges) {
+      // Create flight update notifications using new method
+      if (hoursUntilDeparture <= 6 && hoursUntilDeparture >= -2) { // Only during T-6h to T+2h window
+        await this.notificationService.createFlightUpdateNotifications(
+          tracking.userId,
+          tracking.id,
+          oldData,
+          newData
+        );
+      } else if (changeDetection.hasChanges) {
+        // Fallback to legacy notification system for flights outside T-6h window
         await this.notificationService.createNotificationsForChanges(
           tracking.userId,
           tracking.id,
@@ -139,11 +211,16 @@ export class FlightTrackingService {
         );
       }
 
+      // Actualizar tracking con nuevos datos
+      await this.updateFlightTracking(tracking, response.data, changeDetection);
+
       logger.info('Flight polling completed', {
         trackingId,
         flightId: tracking.flightId,
         hasChanges: changeDetection.hasChanges,
         changes: changeDetection.changes.length,
+        hoursUntilDeparture,
+        isInActiveWindow: hoursUntilDeparture <= 6 && hoursUntilDeparture >= -2
       });
     } catch (error) {
       logger.error('Error processing flight polling', { trackingId, error });

@@ -1,30 +1,390 @@
-// Define Notification type locally if not available from another module
-export type Notification = {
-  id: string;
-  userId: string;
-  flightTrackingId: string;
-  type: string;
-  title: string;
-  message: string;
-  data: any;
-  isRead: boolean;
-  createdAt: Date;
-  // Add other fields as needed based on your Prisma schema
-};
-
-// Define NotificationType enum locally if not available from another module
-export enum NotificationType {
-  STATUS_CHANGE = 'STATUS_CHANGE',
-  GATE_CHANGE = 'GATE_CHANGE',
-  TERMINAL_CHANGE = 'TERMINAL_CHANGE',
-  DELAY_CHANGE = 'DELAY_CHANGE',
-  FLIGHT_CANCELLED = 'FLIGHT_CANCELLED',
-}
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 import { FlightChange, NotificationData } from '../types/flight';
+import { createPushService } from './push.service';
+import { connection } from '../infra/redis';
+import { $Enums, Notification } from '@prisma/client';
 
 export class NotificationService {
+  private pushService = createPushService(prisma);
+
+  /**
+   * Crea notificación "UPCOMING_FLIGHT" de forma idempotente cuando faltan ≤6h
+   * Note: Using STATUS_CHANGE as fallback until schema migration
+   */
+  async createUpcomingFlightNotification(
+    userId: string,
+    flightTracking: { 
+      id: string; 
+      flightId: string;
+      flightNumber: string;
+      airline: string;
+      origin: string; 
+      destination: string;
+      scheduledDeparture: Date;
+      status: string;
+      gate?: string;
+      terminal?: string;
+      delay: number;
+    }
+  ): Promise<Notification | null> {
+    try {
+      // Verificar si ya existe (idempotencia) - buscar por título específico
+      const existing = await prisma.notification.findFirst({
+        where: {
+          userId,
+          flightTrackingId: flightTracking.id,
+          title: '✈️ Próximo vuelo'
+        }
+      });
+
+      if (existing) {
+        logger.info('UPCOMING_FLIGHT notification already exists', { 
+          userId, 
+          flightTrackingId: flightTracking.id 
+        });
+        return existing; // Return as-is, the notification already exists
+      }
+
+      // Crear la notificación
+      const hoursUntil = Math.round((flightTracking.scheduledDeparture.getTime() - Date.now()) / (1000 * 60 * 60));
+      
+      const notification = await prisma.notification.create({
+        data: {
+          userId,
+          flightTrackingId: flightTracking.id,
+          type: $Enums.NotificationType.STATUS_CHANGE,
+          title: '✈️ Próximo vuelo',
+          message: `Tu vuelo ${flightTracking.flightNumber} sale en ${hoursUntil}h (${flightTracking.origin} → ${flightTracking.destination})`,
+          data: {
+            flightId: flightTracking.flightId,
+            flightNumber: flightTracking.flightNumber,
+            airline: flightTracking.airline,
+            origin: flightTracking.origin,
+            destination: flightTracking.destination,
+            scheduledDeparture: flightTracking.scheduledDeparture.toISOString(),
+            status: flightTracking.status,
+            gate: flightTracking.gate,
+            terminal: flightTracking.terminal,
+            delay: flightTracking.delay,
+            hoursUntil,
+            notificationType: 'UPCOMING_FLIGHT'
+          }
+        }
+      });
+
+      const mappedNotification: Notification = notification;
+
+      // Publicar por SSE (no esperar)
+      this.publishNotificationToSSE(userId, mappedNotification).catch(error => {
+        logger.error('Failed to publish UPCOMING_FLIGHT to SSE', { 
+          notificationId: notification.id, 
+          userId, 
+          error 
+        });
+      });
+
+      // Enviar push notification (no esperar)
+      this.sendPushNotification(userId, mappedNotification).catch(error => {
+        logger.error('Failed to send UPCOMING_FLIGHT push', { 
+          notificationId: notification.id, 
+          userId, 
+          error 
+        });
+      });
+
+      logger.info('UPCOMING_FLIGHT notification created', { 
+        userId, 
+        flightTrackingId: flightTracking.id,
+        notificationId: notification.id,
+        flightNumber: flightTracking.flightNumber
+      });
+
+      return mappedNotification;
+    } catch (error) {
+      logger.error('Error creating UPCOMING_FLIGHT notification', { 
+        userId, 
+        flightTrackingId: flightTracking.id, 
+        error 
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Crea notificaciones de actualización de vuelo de forma idempotente
+   */
+  async createFlightUpdateNotifications(
+    userId: string,
+    flightTrackingId: string,
+    oldData: { status: string; gate?: string; terminal?: string; delay: number; },
+    newData: { status: string; gate?: string; terminal?: string; delay: number; }
+  ): Promise<Notification[]> {
+    try {
+      const notifications: Notification[] = [];
+      const now = new Date();
+
+      // Cambio de estado
+      if (oldData.status !== newData.status) {
+        const title = '🔄 Estado del vuelo actualizado';
+        const message = `El estado cambió de ${oldData.status} a ${newData.status}`;
+        
+        const notification = await this.createFlightChangeNotification(
+          userId,
+          flightTrackingId,
+          $Enums.NotificationType.STATUS_CHANGE,
+          title,
+          message,
+          {
+            field: 'status',
+            oldValue: oldData.status,
+            newValue: newData.status,
+            changeType: 'status',
+            timestamp: now.toISOString()
+          }
+        );
+        if (notification) notifications.push(notification);
+      }
+
+      // Cambio de puerta
+      if (oldData.gate !== newData.gate && newData.gate) {
+        const title = '🚪 Cambio de puerta';
+        const message = `Puerta actualizada: ${oldData.gate || 'sin asignar'} → ${newData.gate}`;
+        
+        const notification = await this.createFlightChangeNotification(
+          userId,
+          flightTrackingId,
+          $Enums.NotificationType.GATE_CHANGE,
+          title,
+          message,
+          {
+            field: 'gate',
+            oldValue: oldData.gate,
+            newValue: newData.gate,
+            changeType: 'gate',
+            timestamp: now.toISOString()
+          }
+        );
+        if (notification) notifications.push(notification);
+      }
+
+      // Cambio de terminal
+      if (oldData.terminal !== newData.terminal && newData.terminal) {
+        const title = '🏢 Cambio de terminal';
+        const message = `Terminal actualizado: ${oldData.terminal || 'sin asignar'} → ${newData.terminal}`;
+        
+        const notification = await this.createFlightChangeNotification(
+          userId,
+          flightTrackingId,
+          $Enums.NotificationType.TERMINAL_CHANGE,
+          title,
+          message,
+          {
+            field: 'terminal',
+            oldValue: oldData.terminal,
+            newValue: newData.terminal,
+            changeType: 'terminal',
+            timestamp: now.toISOString()
+          }
+        );
+        if (notification) notifications.push(notification);
+      }
+
+      // Cambio de retraso ≥5min
+      const delayDiff = Math.abs(newData.delay - oldData.delay);
+      if (delayDiff >= 5) {
+        const isIncrease = newData.delay > oldData.delay;
+        const title = isIncrease ? '⏰ Retraso en el vuelo' : '✅ Mejora en el horario';
+        const message = isIncrease
+          ? `⏰ Retraso adicional de ${delayDiff} minutos (total: ${newData.delay} min)`
+          : `✅ Retraso reducido en ${delayDiff} minutos (total: ${newData.delay} min)`;
+
+        const notification = await this.createFlightChangeNotification(
+          userId,
+          flightTrackingId,
+          $Enums.NotificationType.DELAY_CHANGE,
+          title,
+          message,
+          {
+            field: 'delay',
+            oldValue: oldData.delay,
+            newValue: newData.delay,
+            delayDiff,
+            changeType: 'delay',
+            timestamp: now.toISOString()
+          }
+        );
+        if (notification) notifications.push(notification);
+      }
+
+      logger.info('Flight update notifications processed', {
+        userId,
+        flightTrackingId,
+        createdCount: notifications.length
+      });
+
+      return notifications;
+    } catch (error) {
+      logger.error('Error creating flight update notifications', { 
+        userId, 
+        flightTrackingId, 
+        error 
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Helper method to create flight change notifications
+   */
+  private async createFlightChangeNotification(
+    userId: string,
+    flightTrackingId: string,
+    type: $Enums.NotificationType,
+    title: string,
+    message: string,
+    meta: any
+  ): Promise<Notification | null> {
+    try {
+      // Check if similar notification exists in recent time (avoid spam)
+      const recentCutoff = new Date(Date.now() - 10 * 60 * 1000); // 10 minutes ago
+      const existing = await prisma.notification.findFirst({
+        where: {
+          userId,
+          flightTrackingId,
+          type,
+          title,
+          createdAt: {
+            gte: recentCutoff
+          }
+        }
+      });
+
+      if (existing) {
+        logger.info('Similar notification already exists recently', { 
+          userId, 
+          flightTrackingId, 
+          type, 
+          title 
+        });
+        return null;
+      }
+
+      // Create new notification
+      const notification = await prisma.notification.create({
+        data: {
+          userId,
+          flightTrackingId,
+          type,
+          title,
+          message,
+          data: meta
+        }
+      });
+
+      const mappedNotification: Notification = notification;
+
+      // Publish via SSE (don't wait)
+      this.publishNotificationToSSE(userId, mappedNotification).catch(error => {
+        logger.error('Failed to publish notification to SSE', { 
+          notificationId: notification.id, 
+          userId, 
+          error 
+        });
+      });
+
+      // Send push notification (don't wait)
+      this.sendPushNotification(userId, mappedNotification).catch(error => {
+        logger.error('Failed to send push notification', { 
+          notificationId: notification.id, 
+          userId, 
+          error 
+        });
+      });
+
+      return mappedNotification;
+    } catch (error) {
+      logger.error('Error in createFlightChangeNotification', { 
+        userId, 
+        flightTrackingId, 
+        type, 
+        title, 
+        error 
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Crea o obtiene notificación existente (idempotencia)
+   */
+  private async createOrGetNotification(
+    userId: string,
+    flightTrackingId: string,
+    type: $Enums.NotificationType,
+    title: string,
+    message: string,
+    meta: any,
+    dedupKey: string
+  ): Promise<Notification | null> {
+    try {
+      // Buscar primero si existe
+      const existing = await prisma.notification.findFirst({
+        where: {
+          userId,
+          flightTrackingId,
+          type,
+          title: { contains: title.substring(0, 20) } // Partial match to avoid exact duplicates
+        }
+      });
+
+      if (existing) {
+        return null; // Ya existe, no crear duplicado
+      }
+
+      // Crear nueva notificación
+      const notification = await prisma.notification.create({
+        data: {
+          userId,
+          flightTrackingId,
+          type,
+          title,
+          message,
+          data: meta
+        }
+      });
+
+      const mappedNotification: Notification = notification;
+
+      // Publicar por SSE (no esperar)
+      this.publishNotificationToSSE(userId, mappedNotification).catch(error => {
+        logger.error('Failed to publish notification to SSE', { 
+          notificationId: notification.id, 
+          userId, 
+          error 
+        });
+      });
+
+      // Enviar push notification (no esperar)
+      this.sendPushNotification(userId, mappedNotification).catch(error => {
+        logger.error('Failed to send push notification', { 
+          notificationId: notification.id, 
+          userId, 
+          error 
+        });
+      });
+
+      return mappedNotification;
+    } catch (error) {
+      logger.error('Error in createOrGetNotification', { 
+        userId, 
+        flightTrackingId, 
+        type, 
+        error 
+      });
+      throw error;
+    }
+  }
   /**
    * Crea notificaciones para cambios detectados en un vuelo
    */
@@ -69,7 +429,8 @@ export class NotificationService {
   ): Promise<Notification> {
     const { title, message } = this.generateNotificationContent(change);
 
-    return await prisma.notification.create({
+    // Crear notificación en la BD
+    const notification = await prisma.notification.create({
       data: {
         userId,
         flightTrackingId,
@@ -84,6 +445,89 @@ export class NotificationService {
         },
       },
     });
+
+    // Publicar en Redis para SSE (no esperar)
+    this.publishNotificationToSSE(userId, notification).catch(error => {
+      logger.error('Failed to publish notification to SSE', { 
+        notificationId: notification.id, 
+        userId, 
+        error 
+      });
+    });
+
+    // Enviar push notification en paralelo (no bloquear)
+    this.sendPushNotification(userId, notification).catch(error => {
+      logger.error('Failed to send push notification', { 
+        notificationId: notification.id, 
+        userId, 
+        error 
+      });
+    });
+
+    return notification;
+  }
+
+  /**
+   * Publica notificación en Redis para SSE
+   */
+  private async publishNotificationToSSE(userId: string, notification: Notification): Promise<void> {
+    try {
+      const channelName = `notify:user:${userId}`;
+      const message = JSON.stringify({
+        id: notification.id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        meta: notification.data, // Map data field to meta for frontend
+        createdAt: notification.createdAt,
+        flightTrackingId: notification.flightTrackingId
+      });
+
+      await connection.publish(channelName, message);
+      
+      logger.info('Notification published to SSE', { 
+        notificationId: notification.id, 
+        userId,
+        channelName
+      });
+    } catch (error) {
+      logger.error('Failed to publish notification to SSE', { 
+        notificationId: notification.id, 
+        userId, 
+        error 
+      });
+    }
+  }
+
+  /**
+   * Envía push notification para una notificación creada
+   */
+  private async sendPushNotification(userId: string, notification: Notification): Promise<void> {
+    try {
+      const metaData = notification.data as any; // Access data fields
+      await this.pushService.sendPushToUser(userId, {
+        title: notification.title,
+        body: notification.message,
+        url: metaData?.url || '/',
+        data: { 
+          notificationId: notification.id,
+          type: notification.type,
+          flightTrackingId: notification.flightTrackingId
+        }
+      });
+
+      logger.info('Push notification sent', { 
+        notificationId: notification.id, 
+        userId,
+        title: notification.title 
+      });
+    } catch (error) {
+      logger.warn('Push notification failed', { 
+        notificationId: notification.id, 
+        userId, 
+        error 
+      });
+    }
   }
 
   /**
@@ -91,25 +535,25 @@ export class NotificationService {
    */
   private generateNotificationContent(change: FlightChange): { title: string; message: string } {
     switch (change.type) {
-      case NotificationType.STATUS_CHANGE:
+      case $Enums.NotificationType.STATUS_CHANGE:
         return {
           title: 'Estado del vuelo actualizado',
           message: `El estado de tu vuelo cambió de ${change.oldValue} a ${change.newValue}`,
         };
 
-      case NotificationType.GATE_CHANGE:
+      case $Enums.NotificationType.GATE_CHANGE:
         return {
           title: 'Cambio de puerta',
           message: `La puerta de embarque cambió de ${change.oldValue || 'sin asignar'} a ${change.newValue || 'sin asignar'}`,
         };
 
-      case NotificationType.TERMINAL_CHANGE:
+      case $Enums.NotificationType.TERMINAL_CHANGE:
         return {
           title: 'Cambio de terminal',
           message: `La terminal cambió de ${change.oldValue || 'sin asignar'} a ${change.newValue || 'sin asignar'}`,
         };
 
-      case NotificationType.DELAY_CHANGE:
+      case $Enums.NotificationType.DELAY_CHANGE:
         const oldDelay = change.oldValue as number;
         const newDelay = change.newValue as number;
         const delayDiff = newDelay - oldDelay;
@@ -126,7 +570,7 @@ export class NotificationService {
           };
         }
 
-      case NotificationType.FLIGHT_CANCELLED:
+      case $Enums.NotificationType.FLIGHT_CANCELLED:
         return {
           title: 'Vuelo cancelado',
           message: 'Tu vuelo ha sido cancelado. Contacta a la aerolínea para más información.',
