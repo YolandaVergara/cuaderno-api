@@ -3,6 +3,7 @@ import { NotificationController } from '../controllers/notification.controller';
 import { validateRequest } from '../middleware/validation.middleware';
 import { authenticateUser } from '../middleware/auth.middleware';
 import {
+  GetNotificationsSchema,
   MarkNotificationsReadSchema,
 } from '../types/validation';
 
@@ -16,7 +17,11 @@ router.use(authenticateUser);
  * GET /api/notifications
  * Obtiene las notificaciones del usuario con paginación
  */
-router.get('/', (req: any, res: any) => notificationController.getUserNotifications(req, res));
+router.get(
+  '/',
+  validateRequest(GetNotificationsSchema),
+  (req: any, res: any) => notificationController.getUserNotifications(req, res)
+);
 
 /**
  * PUT /api/notifications/read
