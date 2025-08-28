@@ -19,7 +19,9 @@ export class NotificationController {
     res: Response
   ): Promise<void> {
     try {
+      console.log("DEBUG: req object:", Object.keys(req || {}));
       const userId = (req as any).userId;
+      console.log("DEBUG: userId:", userId);
       const queryData = (req as any).validated?.query || req.query || {};
       const page = queryData.page ? parseInt(queryData.page, 10) : 1;
       const limit = queryData.limit ? parseInt(queryData.limit, 10) : 20;
@@ -75,7 +77,9 @@ export class NotificationController {
     res: Response
   ): Promise<void> {
     try {
+      console.log("DEBUG: req object:", Object.keys(req || {}));
       const userId = (req as any).userId;
+      console.log("DEBUG: userId:", userId);
       const { notificationIds } = req.validated.body;
 
       const updatedCount = await this.notificationService.markNotificationsAsRead(
@@ -102,7 +106,9 @@ export class NotificationController {
    */
   async getUnreadCount(req: Request, res: Response): Promise<void> {
     try {
+      console.log("DEBUG: req object:", Object.keys(req || {}));
       const userId = (req as any).userId;
+      console.log("DEBUG: userId:", userId);
       const count = await this.notificationService.getUnreadNotificationCount(userId);
 
       res.json({
