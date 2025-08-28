@@ -20,11 +20,18 @@ export class NotificationController {
   ): Promise<void> {
     try {
       console.log("DEBUG: req object:", Object.keys(req || {}));
+      console.log("DEBUG: req.query:", req.query);
+      
       const userId = (req as any).userId;
       console.log("DEBUG: userId:", userId);
-      const queryData = (req as any).validated?.query || req.query || {};
-      const page = queryData.page ? parseInt(queryData.page, 10) : 1;
-      const limit = queryData.limit ? parseInt(queryData.limit, 10) : 20;
+      
+      if (!userId) {
+        throw new Error("User ID not found in request");
+      }
+      
+      const queryData = req.query || {};
+      const page = queryData.page ? parseInt(queryData.page as string, 10) : 1;
+      const limit = queryData.limit ? parseInt(queryData.limit as string, 10) : 20;
       const unreadOnly = queryData.unreadOnly === 'true' || queryData.unreadOnly === true;
 
       const result = await this.notificationService.getUserNotifications(
