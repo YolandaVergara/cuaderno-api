@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { NotificationController } from '../controllers/notification.controller';
 import { validateRequest } from '../middleware/validation.middleware';
 import { authenticateUser } from '../middleware/auth.middleware';
@@ -19,7 +19,9 @@ router.use(authenticateUser);
  */
 router.get(
   '/',
-  (req: any, res: any) => notificationController.getUserNotifications(req, res)
+  (req: Request, res: Response) => {
+    notificationController.getUserNotifications(req as any, res);
+  }
 );
 
 /**
@@ -29,13 +31,17 @@ router.get(
 router.put(
   '/read',
   validateRequest(MarkNotificationsReadSchema),
-  (req: any, res: any) => notificationController.markNotificationsAsRead(req, res)
+  (req: Request, res: Response) => {
+    notificationController.markNotificationsAsRead(req as any, res);
+  }
 );
 
 /**
  * GET /api/notifications/unread-count
  * Obtiene el conteo de notificaciones no leídas
  */
-router.get('/unread-count', (req: any, res: any) => notificationController.getUnreadCount(req, res));
+router.get('/unread-count', (req: Request, res: Response) => {
+  notificationController.getUnreadCount(req, res);
+});
 
 export { router as notificationRoutes };

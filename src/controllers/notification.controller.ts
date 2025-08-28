@@ -32,7 +32,7 @@ export class NotificationController {
       const queryData = req.query || {};
       const page = queryData.page ? parseInt(queryData.page as string, 10) : 1;
       const limit = queryData.limit ? parseInt(queryData.limit as string, 10) : 20;
-      const unreadOnly = queryData.unreadOnly === 'true' || queryData.unreadOnly === true;
+      const unreadOnly = queryData.unreadOnly === 'true' || queryData.unreadOnly === '1';
 
       const result = await this.notificationService.getUserNotifications(
         userId,
