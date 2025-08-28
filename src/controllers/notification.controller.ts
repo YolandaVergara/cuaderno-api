@@ -1,8 +1,6 @@
-import { Request, Response } from 'express';
-import { ValidatedRequest } from '../middleware/validation.middleware';
-import { GetNotificationsInput, MarkNotificationsReadInput } from '../types/validation';
-import { NotificationService } from '../services/notification.service';
-import { logger } from '../config/logger';
+import { Request, Response } from "express";
+import { logger } from "../config/logger";
+import { NotificationService } from "../services/notification.service";
 
 export class NotificationController {
   private notificationService: NotificationService;
@@ -13,24 +11,57 @@ export class NotificationController {
 
   /**
    * Obtiene las notificaciones de un usuario con paginación
+   * DEFENSIVO: funciona con o sin middleware de validación
    */
-      async getUserNotifications(req: any, res: any): Promise<void> {
+  async getUserNotifications(req: Request & { validated?: any; userId?: string }, res: Response) {
     try {
-      console.log("🔍 DEBUG: Method called");
-      console.log("🔍 DEBUG: req exists:", !!req);
-      console.log("🔍 DEBUG: req.query exists:", !!req?.query);
-      
-      res.json({
-        message: 'Debug: Method working',
-        requestExists: !!req,
-        queryExists: !!req?.query,
-        keys: req ? Object.keys(req) : 'req is null'
+      const userId = (req as any).userId || req.headers["x-user-id"];
+      if (!userId) return res.status(401).json({ error: "Missing userId" });
+
+      // DEBUG: Verificar qué llega
+      console.log("🔍 DEBUG req.validated:", !!req.validated);
+      console.log("🔍 DEBUG req.query:", req.query);
+
+      // Usa validated si existe; si no, recurre a req.query
+      const q = (req.validated?.query ?? req.query) as any;
+      const page = q.page ? parseInt(String(q.page), 10) : 1;
+      const limit = q.limit ? parseInt(String(q.limit), 10) : 20;
+      const unreadOnly = q.unreadOnly === true || String(q.unreadOnly) === "true";
+
+      console.log("🔍 DEBUG parsed:", { page, limit, unreadOnly });
+
+      // Llamar al servicio
+      const result = await this.notificationService.getUserNotifications(
+        String(userId), page, limit, unreadOnly
+      );
+
+      return res.json({
+        message: "Notifications retrieved successfully",
+        pagination: { page, limit, total: result.total, totalPages: result.totalPages },
+        count: result.notifications.length,
+        data: result.notifications.map(notification => ({
+          id: notification.id,
+          type: notification.type,
+          title: notification.title,
+          message: notification.message,
+          data: notification.data,
+          isRead: notification.isRead,
+          createdAt: notification.createdAt,
+          flight: {
+            flightId: notification.flightTracking?.flightId,
+            flightNumber: notification.flightTracking?.flightNumber,
+            airline: notification.flightTracking?.airline,
+            origin: notification.flightTracking?.origin,
+            destination: notification.flightTracking?.destination,
+            scheduledDeparture: notification.flightTracking?.scheduledDeparture,
+          },
+        })),
       });
-    } catch (error) {
-      console.error("🔍 DEBUG: Error in method:", error);
-      res.status(500).json({
-        error: 'Debug error',
-        details: error.message
+    } catch (e: any) {
+      console.error("🔍 ERROR in getUserNotifications:", e);
+      return res.status(500).json({ 
+        error: "Failed to get notifications", 
+        details: e.message || String(e) 
       });
     }
   }
@@ -38,15 +69,10 @@ export class NotificationController {
   /**
    * Marca notificaciones como leídas
    */
-  async markNotificationsAsRead(
-    req: ValidatedRequest<MarkNotificationsReadInput>,
-    res: Response
-  ): Promise<void> {
+  async markNotificationsAsRead(req: Request & { validated?: any }, res: Response) {
     try {
-      console.log("DEBUG: req object:", Object.keys(req || {}));
       const userId = (req as any).userId;
-      console.log("DEBUG: userId:", userId);
-      const { notificationIds } = req.validated.body;
+      const { notificationIds } = req.validated?.body || req.body;
 
       const updatedCount = await this.notificationService.markNotificationsAsRead(
         userId,
@@ -56,7 +82,6 @@ export class NotificationController {
       res.json({
         message: 'Notifications marked as read',
         updatedCount,
-        notificationIds,
       });
     } catch (error) {
       logger.error('Error marking notifications as read', { error });
@@ -72,9 +97,7 @@ export class NotificationController {
    */
   async getUnreadCount(req: Request, res: Response): Promise<void> {
     try {
-      console.log("DEBUG: req object:", Object.keys(req || {}));
       const userId = (req as any).userId;
-      console.log("DEBUG: userId:", userId);
       const count = await this.notificationService.getUnreadNotificationCount(userId);
 
       res.json({
