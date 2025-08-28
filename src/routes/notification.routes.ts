@@ -40,6 +40,10 @@ router.put(
  * GET /api/notifications/unread-count
  * Obtiene el conteo de notificaciones no leídas
  */
+router.get('/test', (req: Request, res: Response) => {
+  res.json({ message: 'Direct test route', query: req.query });
+});
+
 router.get('/unread-count', (req: Request, res: Response) => {
   notificationController.getUnreadCount(req, res);
 });
