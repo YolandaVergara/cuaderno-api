@@ -18,9 +18,6 @@ export class NotificationController {
       const userId = (req as any).userId || req.headers["x-user-id"];
       if (!userId) return res.status(401).json({ error: "Missing userId" });
 
-      // DEBUG: Verificar qué llega
-      console.log("🔍 DEBUG req.validated:", !!req.validated);
-      console.log("🔍 DEBUG req.query:", req.query);
 
       // Usa validated si existe; si no, recurre a req.query
       const q = (req.validated?.query ?? req.query) as any;
@@ -28,7 +25,6 @@ export class NotificationController {
       const limit = q.limit ? parseInt(String(q.limit), 10) : 20;
       const unreadOnly = q.unreadOnly === true || String(q.unreadOnly) === "true";
 
-      console.log("🔍 DEBUG parsed:", { page, limit, unreadOnly });
 
       // Llamar al servicio
       const result = await this.notificationService.getUserNotifications(

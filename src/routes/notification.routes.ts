@@ -20,14 +20,11 @@ router.get(
 // PUT /api/notifications/read
 router.put(
   "/read", 
-  // validateRequest(MarkNotificationsReadSchema), // TODO: crear schema si no existe
   (req, res) => controller.markNotificationsAsRead(req as any, res)
 );
 
 // GET /api/notifications/unread-count
 router.get("/unread-count", (req, res) => controller.getUnreadCount(req, res));
 
-// Endpoint de prueba para confirmar build
-router.get("/test", (_req, res) => res.json({ ok: true, route: "notifications/test", timestamp: new Date().toISOString() }));
 
-export default router;
+export { router as notificationRoutes };

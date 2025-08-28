@@ -14,6 +14,13 @@ const flightController = new FlightController();
 router.use(authenticateUser);
 
 /**
+ * GET /api/flight/trackings
+ * Obtiene todos los seguimientos activos del usuario
+ * IMPORTANTE: Esta ruta específica debe ir ANTES que /:flightId
+ */
+router.get('/trackings', (req: any, res: any) => flightController.getUserFlightTrackings(req, res));
+
+/**
  * GET /api/flight/:flightId
  * Obtiene información completa de un vuelo específico
  */
@@ -38,11 +45,5 @@ router.delete(
   validateRequest(CancelTrackingSchema),
   (req: any, res: any) => flightController.cancelFlightTracking(req, res)
 );
-
-/**
- * GET /api/flight/trackings
- * Obtiene todos los seguimientos activos del usuario
- */
-router.get('/trackings', (req: any, res: any) => flightController.getUserFlightTrackings(req, res));
 
 export { router as flightRoutes };

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { flightRoutes } from './flight.routes';
-import notificationRoutes from './notification.routes';
+import { notificationRoutes } from './notification.routes';
 
 const router = Router();
 
