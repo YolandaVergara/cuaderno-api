@@ -26,6 +26,9 @@ router.put(
 // GET /api/notifications/unread-count
 router.get("/unread-count", (req, res) => controller.getUnreadCount(req, res));
 
+// GET /api/notifications/trips - Notificaciones por trips
+router.get("/trips", (req, res) => controller.getNotificationsByTrips(req, res));
+
 // SSE stream endpoint (no auth middleware needed here as it handles auth internally)
 router.get("/stream", (req, res, next) => {
   // Remove auth middleware for SSE endpoint as it handles userId via query param

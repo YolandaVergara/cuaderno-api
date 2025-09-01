@@ -617,6 +617,7 @@ export class NotificationService {
                 origin: true,
                 destination: true,
                 scheduledDeparture: true,
+                tripId: true, // Incluir tripId
               },
             },
           },
@@ -639,6 +640,81 @@ export class NotificationService {
       };
     } catch (error) {
       logger.error('Error getting user notifications', { userId, page, limit, unreadOnly, error });
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene notificaciones de vuelos para todos los viajes de un usuario
+   */
+  async getNotificationsByTrips(
+    userId: string,
+    tripIds: string[],
+    page = 1,
+    limit = 20,
+    unreadOnly = false
+  ): Promise<{
+    notifications: (Notification & { flightTracking: any })[];
+    total: number;
+    page: number;
+    totalPages: number;
+  }> {
+    try {
+      if (tripIds.length === 0) {
+        return {
+          notifications: [],
+          total: 0,
+          page,
+          totalPages: 0,
+        };
+      }
+
+      const skip = (page - 1) * limit;
+      const where = {
+        flightTracking: {
+          tripId: {
+            in: tripIds,
+          },
+        },
+        ...(unreadOnly && { isRead: false }),
+      };
+
+      const [notifications, total] = await Promise.all([
+        prisma.notification.findMany({
+          where,
+          include: {
+            flightTracking: {
+              select: {
+                flightId: true,
+                flightNumber: true,
+                airline: true,
+                origin: true,
+                destination: true,
+                scheduledDeparture: true,
+                tripId: true,
+                userId: true, // Para saber quién registró el vuelo
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+          skip,
+          take: limit,
+        }),
+        prisma.notification.count({ where }),
+      ]);
+
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        notifications,
+        total,
+        page,
+        totalPages,
+      };
+    } catch (error) {
+      logger.error('Error getting notifications by trips', { userId, tripIds, page, limit, unreadOnly, error });
       throw error;
     }
   }

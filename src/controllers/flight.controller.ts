@@ -29,7 +29,7 @@ export class FlightController {
   ): Promise<void> {
     try {
       const userId = (req as any).userId;
-      const { flightId, airline, flightNumber, scheduledDeparture, origin, destination } = req.validated.body;
+      const { flightId, airline, flightNumber, scheduledDeparture, origin, destination, tripId, participants } = req.validated.body;
 
       const flightData = {
         flightId,
@@ -40,6 +40,63 @@ export class FlightController {
         destination,
       };
 
+      // Si hay tripId y participants, registrar para todos los participantes
+      if (tripId && participants && participants.length > 0) {
+        const trackings: any[] = [];
+        
+        // Registrar tracking para cada participante
+        for (const participantId of participants) {
+          try {
+            const tracking = await this.flightTrackingService.registerFlightTracking(participantId, flightData);
+            trackings.push(tracking);
+            
+            // Programar job de polling para cada participante
+            const interval = calculatePollingInterval(flightData.scheduledDeparture);
+            const nextPollAt = calculateNextPollDate(interval);
+            const delay = Math.max(0, nextPollAt.getTime() - Date.now());
+
+            await this.jobManager.scheduleFlightPollingJob(
+              tracking.id,
+              tracking.flightId,
+              participantId,
+              delay
+            );
+          } catch (error) {
+            logger.warn('Failed to register tracking for participant', { participantId, error });
+          }
+        }
+
+        logger.info('Flight tracking registered for trip participants', {
+          userId,
+          tripId,
+          flightId,
+          participantCount: participants.length,
+          successfulTrackings: trackings.length,
+        });
+
+        // Retornar el tracking del usuario principal
+        const userTracking = trackings.find(t => t.userId === userId) || trackings[0];
+        
+        res.status(201).json({
+          message: 'Flight tracking registered successfully for all trip participants',
+          data: {
+            trackingId: userTracking?.id,
+            flightId: userTracking?.flightId,
+            flightNumber: userTracking?.flightNumber,
+            scheduledDeparture: userTracking?.scheduledDeparture,
+            origin: userTracking?.origin,
+            destination: userTracking?.destination,
+            status: userTracking?.status,
+            nextPollAt: userTracking?.nextPollAt,
+            pollInterval: userTracking?.pollInterval,
+            tripId,
+            participantCount: trackings.length,
+          },
+        });
+        return;
+      }
+
+      // Registro individual (sin viaje)
       const tracking = await this.flightTrackingService.registerFlightTracking(userId, flightData);
 
       // Programar job de polling

@@ -27,6 +27,7 @@ model User {
 model FlightTracking {
   id              String           @id @default(cuid())
   userId          String
+  tripId          String?          // ID del viaje al que pertenece este vuelo
   flightId        String           // Identificador del vuelo (e.g., "AA123-2024-08-26")
   airline         String
   flightNumber    String
@@ -51,6 +52,7 @@ model FlightTracking {
 
   @@unique([userId, flightId])
   @@index([nextPollAt, isActive])
+  @@index([tripId])
   @@map("flight_tracking")
 }
 

@@ -15,10 +15,53 @@ export class FlightTrackingService {
 
   /**
    * Registra un vuelo para seguimiento (idempotente)
+   * Soporta registro para múltiples usuarios de un viaje
    */
   async registerFlightTracking(
     userId: string,
-    flightData: Omit<FlightData, 'status' | 'delay'>
+    flightData: Omit<FlightData, 'status' | 'delay'>,
+    options?: { tripId?: string; participants?: string[] }
+  ): Promise<FlightTracking> {
+    try {
+      const { tripId, participants } = options || {};
+      
+      // Si hay tripId y participantes, registrar para todos los participantes
+      if (tripId && participants && participants.length > 0) {
+        const trackings: FlightTracking[] = [];
+        
+        for (const participantId of participants) {
+          const tracking = await this.createSingleTracking(participantId, flightData, tripId);
+          if (tracking) {
+            trackings.push(tracking);
+          }
+        }
+        
+        logger.info('Flight tracking registered for all trip participants', {
+          tripId,
+          flightId: flightData.flightId,
+          participantCount: participants.length,
+          participants
+        });
+        
+        // Retornar el tracking del usuario que lo registró
+        return trackings.find(t => t.userId === userId) || trackings[0];
+      }
+      
+      // Si no hay información del viaje, registrar solo para el usuario actual
+      return await this.createSingleTracking(userId, flightData, tripId);
+    } catch (error) {
+      logger.error('Error registering flight tracking', { userId, flightData, options, error });
+      throw error;
+    }
+  }
+
+  /**
+   * Crea un tracking individual para un usuario
+   */
+  private async createSingleTracking(
+    userId: string,
+    flightData: Omit<FlightData, 'status' | 'delay'>,
+    tripId?: string
   ): Promise<FlightTracking> {
     try {
       // Verificar si ya existe
@@ -43,6 +86,7 @@ export class FlightTrackingService {
       const tracking = await prisma.flightTracking.create({
         data: {
           userId,
+          tripId,
           flightId: flightData.flightId,
           airline: flightData.airline,
           flightNumber: flightData.flightNumber,
@@ -55,7 +99,7 @@ export class FlightTrackingService {
           delay: 0,
           pollInterval: interval,
           nextPollAt,
-        },
+        } as any, // Temporal mientras se actualiza Prisma
       });
 
       // Check if flight is already within 6 hours - create upcoming notification immediately
@@ -439,6 +483,32 @@ export class FlightTrackingService {
       });
     } catch (error) {
       logger.error('Error getting user flight trackings', { userId, error });
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene todos los seguimientos activos de los viajes de un usuario
+   */
+  async getFlightTrackingsByTrips(tripIds: string[]): Promise<FlightTracking[]> {
+    try {
+      if (tripIds.length === 0) {
+        return [];
+      }
+
+      return await prisma.flightTracking.findMany({
+        where: {
+          tripId: {
+            in: tripIds,
+          },
+          isActive: true,
+        },
+        orderBy: {
+          scheduledDeparture: 'asc',
+        },
+      });
+    } catch (error) {
+      logger.error('Error getting flight trackings by trips', { tripIds, error });
       throw error;
     }
   }

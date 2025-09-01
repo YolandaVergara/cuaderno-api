@@ -9,6 +9,8 @@ export const RegisterFlightTrackingSchema = z.object({
     scheduledDeparture: z.string().datetime('Invalid datetime format'),
     origin: z.string().min(3, 'Origin must be at least 3 characters').max(3, 'Origin must be exactly 3 characters'),
     destination: z.string().min(3, 'Destination must be at least 3 characters').max(3, 'Destination must be exactly 3 characters'),
+    tripId: z.string().optional(), // ID del viaje al que pertenece este vuelo
+    participants: z.array(z.string()).optional(), // IDs de los participantes del viaje
   }),
 });
 
