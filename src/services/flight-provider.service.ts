@@ -7,30 +7,54 @@ export interface IFlightProvider {
 }
 
 /**
- * Implementación real del proveedor de vuelos
+ * Implementación real del proveedor de vuelos usando FlightAware
  */
 export class FlightProvider implements IFlightProvider {
   async getFlightData(flightId: string): Promise<FlightProviderResponse> {
     try {
-      // Aquí iría la llamada real a la API externa
-      const response = await fetch(`${config.flightProvider.apiUrl}/flights/${flightId}`, {
+      // Parse flightId: format expected is "FLIGHT_NUMBER-YYYY-MM-DD"
+      const [flightNumber, dateStr] = flightId.split('-').slice(0, 2);
+      if (!flightNumber || !dateStr) {
+        throw new Error('Invalid flightId format. Expected: FLIGHT_NUMBER-YYYY-MM-DD');
+      }
+
+      // FlightAware flights/search endpoint
+      const url = new URL(`${config.flightProvider.apiUrl}/flights/search`);
+      url.searchParams.set('query', flightNumber);
+      url.searchParams.set('start', dateStr);
+      url.searchParams.set('end', dateStr);
+      url.searchParams.set('max_pages', '1');
+
+      const response = await fetch(url.toString(), {
         headers: {
-          'Authorization': `Bearer ${config.flightProvider.apiKey}`,
-          'Content-Type': 'application/json',
+          'x-apikey': config.flightProvider.apiKey,
+          'Accept': 'application/json',
+          'User-Agent': 'cuaderno-donde-pise/1.0'
         },
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        throw new Error(`FlightAware API HTTP ${response.status}: ${response.statusText}`);
       }
 
       const data = await response.json();
+      
+      if (!data.flights || data.flights.length === 0) {
+        return {
+          success: false,
+          error: 'Flight not found',
+        };
+      }
+
+      // Take the first flight result
+      const flight = data.flights[0];
+      
       return {
         success: true,
-        data: this.mapToFlightData(data),
+        data: this.mapFlightAwareToFlightData(flight, flightId),
       };
     } catch (error) {
-      logger.error('Error fetching flight data', { flightId, error });
+      logger.error('Error fetching flight data from FlightAware', { flightId, error });
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -38,21 +62,48 @@ export class FlightProvider implements IFlightProvider {
     }
   }
 
-  private mapToFlightData(apiData: any): FlightData {
-    // Mapear la respuesta de la API externa a nuestro formato interno
+  private mapFlightAwareToFlightData(flightAwareData: any, flightId: string): FlightData {
+    // Map FlightAware API response to our internal FlightData format
+    const scheduledDeparture = new Date(flightAwareData.scheduled_out || flightAwareData.estimated_out);
+    const estimatedDeparture = flightAwareData.estimated_out ? new Date(flightAwareData.estimated_out) : undefined;
+    const actualDeparture = flightAwareData.actual_out ? new Date(flightAwareData.actual_out) : undefined;
+
+    // Determine status based on FlightAware status
+    let status = FlightStatus.SCHEDULED;
+    if (flightAwareData.status) {
+      const statusLower = flightAwareData.status.toLowerCase();
+      if (statusLower.includes('cancelled')) {
+        status = FlightStatus.CANCELLED;
+      } else if (statusLower.includes('departed')) {
+        status = FlightStatus.DEPARTED;
+      } else if (statusLower.includes('boarding')) {
+        status = FlightStatus.BOARDING;
+      } else if (statusLower.includes('delayed')) {
+        status = FlightStatus.DELAYED;
+      } else if (statusLower.includes('arrived')) {
+        status = FlightStatus.ARRIVED;
+      }
+    }
+
+    // Calculate delay in minutes
+    let delay = 0;
+    if (flightAwareData.departure_delay && flightAwareData.departure_delay > 0) {
+      delay = Math.floor(flightAwareData.departure_delay / 60); // Convert seconds to minutes
+    }
+
     return {
-      flightId: apiData.flight_id,
-      airline: apiData.airline,
-      flightNumber: apiData.flight_number,
-      scheduledDeparture: new Date(apiData.scheduled_departure),
-      origin: apiData.origin,
-      destination: apiData.destination,
-      status: apiData.status as FlightStatus,
-      gate: apiData.gate,
-      terminal: apiData.terminal,
-      delay: apiData.delay_minutes || 0,
-      actualDeparture: apiData.actual_departure ? new Date(apiData.actual_departure) : undefined,
-      estimatedDeparture: apiData.estimated_departure ? new Date(apiData.estimated_departure) : undefined,
+      flightId,
+      airline: flightAwareData.operator || 'Unknown',
+      flightNumber: flightAwareData.ident_iata || flightAwareData.ident || flightId.split('-')[0],
+      scheduledDeparture,
+      origin: flightAwareData.origin?.code_iata || flightAwareData.origin?.code_icao || 'Unknown',
+      destination: flightAwareData.destination?.code_iata || flightAwareData.destination?.code_icao || 'Unknown',
+      status,
+      gate: flightAwareData.gate_origin,
+      terminal: flightAwareData.terminal_origin,
+      delay,
+      actualDeparture,
+      estimatedDeparture,
     };
   }
 }

@@ -88,3 +88,4 @@ Thumbs.db
 # Prisma
 prisma/*.db
 prisma/*.db-journal
+dev.db

@@ -73,9 +73,14 @@ export class JobManager {
         const { trackingId, flightId } = job.data;
         logger.info('Processing flight polling job', { trackingId, flightId });
 
-        // Simular polling por ahora
-        logger.info('Polling flight update', { trackingId, flightId });
-        // TODO: Implementar await this.flightTrackingService.pollFlightUpdate(trackingId);
+        try {
+          // Ejecutar el polling real del vuelo
+          await this.flightTrackingService.processFlightPolling(trackingId);
+          logger.info('Flight polling job completed successfully', { trackingId, flightId });
+        } catch (error) {
+          logger.error('Flight polling job failed', { trackingId, flightId, error });
+          throw error; // Re-throw para que BullMQ maneje los reintentos
+        }
       },
       {
         connection: connection as any,
@@ -115,7 +120,7 @@ export class JobManager {
           {
             trackingId: tracking.id,
             flightId: tracking.flightId,
-            userId: tracking.userId,
+            userId: tracking.createdByUserId,
           },
           {
             delay,

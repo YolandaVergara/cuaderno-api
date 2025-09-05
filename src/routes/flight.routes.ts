@@ -14,6 +14,13 @@ const flightController = new FlightController();
 router.use(authenticateUser);
 
 /**
+ * GET /api/flight/by-date
+ * Busca vuelos por número de vuelo y fecha (usado por el frontend)
+ * Formato de query params: ?ident=FLIGHT_NUMBER&date=YYYY-MM-DD
+ */
+router.get('/by-date', (req: any, res: any) => flightController.searchFlightByDate(req, res));
+
+/**
  * GET /api/flight/trackings
  * Obtiene todos los seguimientos activos del usuario
  * IMPORTANTE: Esta ruta específica debe ir ANTES que /:flightId

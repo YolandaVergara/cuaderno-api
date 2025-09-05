@@ -1,9 +1,9 @@
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
-import { FlightChange, NotificationData } from '../types/flight';
+import { FlightChange, NotificationData, NotificationType } from '../types/flight';
 import { createPushService } from './push.service';
 import { connection } from '../infra/redis';
-import { $Enums, Notification } from '@prisma/client';
+import { Notification } from '@prisma/client';
 
 export class NotificationService {
   private pushService = createPushService(prisma);
@@ -53,10 +53,10 @@ export class NotificationService {
         data: {
           userId,
           flightTrackingId: flightTracking.id,
-          type: $Enums.NotificationType.STATUS_CHANGE,
+          type: NotificationType.STATUS_CHANGE,
           title: '✈️ Próximo vuelo',
           message: `Tu vuelo ${flightTracking.flightNumber} sale en ${hoursUntil}h (${flightTracking.origin} → ${flightTracking.destination})`,
-          data: {
+          data: JSON.stringify({
             flightId: flightTracking.flightId,
             flightNumber: flightTracking.flightNumber,
             airline: flightTracking.airline,
@@ -69,7 +69,7 @@ export class NotificationService {
             delay: flightTracking.delay,
             hoursUntil,
             notificationType: 'UPCOMING_FLIGHT'
-          }
+          })
         }
       });
 
@@ -132,7 +132,7 @@ export class NotificationService {
         const notification = await this.createFlightChangeNotification(
           userId,
           flightTrackingId,
-          $Enums.NotificationType.STATUS_CHANGE,
+          NotificationType.STATUS_CHANGE,
           title,
           message,
           {
@@ -154,7 +154,7 @@ export class NotificationService {
         const notification = await this.createFlightChangeNotification(
           userId,
           flightTrackingId,
-          $Enums.NotificationType.GATE_CHANGE,
+          NotificationType.GATE_CHANGE,
           title,
           message,
           {
@@ -176,7 +176,7 @@ export class NotificationService {
         const notification = await this.createFlightChangeNotification(
           userId,
           flightTrackingId,
-          $Enums.NotificationType.TERMINAL_CHANGE,
+          NotificationType.TERMINAL_CHANGE,
           title,
           message,
           {
@@ -202,7 +202,7 @@ export class NotificationService {
         const notification = await this.createFlightChangeNotification(
           userId,
           flightTrackingId,
-          $Enums.NotificationType.DELAY_CHANGE,
+          NotificationType.DELAY_CHANGE,
           title,
           message,
           {
@@ -240,7 +240,7 @@ export class NotificationService {
   private async createFlightChangeNotification(
     userId: string,
     flightTrackingId: string,
-    type: $Enums.NotificationType,
+    type: NotificationType,
     title: string,
     message: string,
     meta: any
@@ -321,7 +321,7 @@ export class NotificationService {
   private async createOrGetNotification(
     userId: string,
     flightTrackingId: string,
-    type: $Enums.NotificationType,
+    type: NotificationType,
     title: string,
     message: string,
     meta: any,
@@ -437,12 +437,12 @@ export class NotificationService {
         type: change.type,
         title,
         message,
-        data: {
+        data: JSON.stringify({
           field: change.field,
           oldValue: change.oldValue,
           newValue: change.newValue,
           significance: change.significance,
-        },
+        }),
       },
     });
 
@@ -535,25 +535,25 @@ export class NotificationService {
    */
   private generateNotificationContent(change: FlightChange): { title: string; message: string } {
     switch (change.type) {
-      case $Enums.NotificationType.STATUS_CHANGE:
+      case NotificationType.STATUS_CHANGE:
         return {
           title: 'Estado del vuelo actualizado',
           message: `El estado de tu vuelo cambió de ${change.oldValue} a ${change.newValue}`,
         };
 
-      case $Enums.NotificationType.GATE_CHANGE:
+      case NotificationType.GATE_CHANGE:
         return {
           title: 'Cambio de puerta',
           message: `La puerta de embarque cambió de ${change.oldValue || 'sin asignar'} a ${change.newValue || 'sin asignar'}`,
         };
 
-      case $Enums.NotificationType.TERMINAL_CHANGE:
+      case NotificationType.TERMINAL_CHANGE:
         return {
           title: 'Cambio de terminal',
           message: `La terminal cambió de ${change.oldValue || 'sin asignar'} a ${change.newValue || 'sin asignar'}`,
         };
 
-      case $Enums.NotificationType.DELAY_CHANGE:
+      case NotificationType.DELAY_CHANGE:
         const oldDelay = change.oldValue as number;
         const newDelay = change.newValue as number;
         const delayDiff = newDelay - oldDelay;
@@ -570,7 +570,7 @@ export class NotificationService {
           };
         }
 
-      case $Enums.NotificationType.FLIGHT_CANCELLED:
+      case NotificationType.FLIGHT_CANCELLED:
         return {
           title: 'Vuelo cancelado',
           message: 'Tu vuelo ha sido cancelado. Contacta a la aerolínea para más información.',
@@ -692,7 +692,7 @@ export class NotificationService {
                 destination: true,
                 scheduledDeparture: true,
                 tripId: true,
-                userId: true, // Para saber quién registró el vuelo
+                createdByUserId: true, // Para saber quién registró el vuelo
               },
             },
           },

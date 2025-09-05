@@ -142,6 +142,100 @@ export class FlightController {
   }
 
   /**
+   * Busca vuelos por número de vuelo y fecha (usado por el frontend FlightAware integration)
+   */
+  async searchFlightByDate(req: Request, res: Response): Promise<void> {
+    try {
+      const { ident, date } = req.query;
+
+      if (!ident || !date) {
+        res.status(400).json({
+          error: 'Missing required parameters: ident (flight number) and date',
+          received: { ident: !!ident, date: !!date }
+        });
+        return;
+      }
+
+      // Create flightId in the format expected by our system
+      const flightId = `${ident}-${date}`;
+      
+      // Use our flight provider to get flight data
+      const flightProvider = createFlightProvider();
+      const result = await flightProvider.getFlightData(flightId);
+
+      if (!result.success) {
+        res.status(404).json({
+          error: result.error || 'Flight not found',
+          query: { ident, date }
+        });
+        return;
+      }
+
+      // Map our internal FlightData to the format expected by the frontend
+      const flightData = result.data!;
+      const response = {
+        flights: [{
+          ident_iata: flightData.flightNumber,
+          ident: flightData.flightNumber,
+          operator: flightData.airline,
+          scheduled_out: flightData.scheduledDeparture.toISOString(),
+          estimated_out: flightData.estimatedDeparture?.toISOString() || flightData.scheduledDeparture.toISOString(),
+          actual_out: flightData.actualDeparture?.toISOString(),
+          status: flightData.status,
+          departure_delay: flightData.delay * 60, // Convert minutes to seconds for FlightAware format
+          origin: {
+            name: this.getAirportName(flightData.origin),
+            code_iata: flightData.origin,
+            code_icao: flightData.origin
+          },
+          destination: {
+            name: this.getAirportName(flightData.destination),
+            code_iata: flightData.destination,
+            code_icao: flightData.destination
+          },
+          gate_origin: flightData.gate,
+          terminal_origin: flightData.terminal,
+          gate_destination: null,
+          terminal_destination: null,
+          aircraft_type: null,
+          registration: null,
+          filed_ete: null
+        }]
+      };
+
+      res.status(200).json(response);
+    } catch (error) {
+      logger.error('Error searching flight by date', { error, query: req.query });
+      res.status(500).json({
+        error: 'Internal server error',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  /**
+   * Helper method to get airport name from code
+   */
+  private getAirportName(code: string): string {
+    const airportMap: Record<string, string> = {
+      'SVQ': 'Sevilla',
+      'LIS': 'Lisboa',
+      'MAD': 'Madrid',
+      'BCN': 'Barcelona',
+      'LEZL': 'Sevilla',
+      'LPPT': 'Lisboa',
+      'LEMD': 'Madrid',
+      'LEBL': 'Barcelona',
+      'JFK': 'John F. Kennedy International',
+      'LAX': 'Los Angeles International',
+      'LHR': 'London Heathrow',
+      'CDG': 'Charles de Gaulle'
+    };
+    
+    return airportMap[code] || code;
+  }
+
+  /**
    * Obtiene los vuelos en seguimiento de un usuario
    */
   async getUserFlightTrackings(req: Request, res: Response): Promise<void> {

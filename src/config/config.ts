@@ -1,12 +1,19 @@
 import { z } from 'zod';
+import dotenv from 'dotenv';
+
+// Load environment variables from .env file
+dotenv.config();
+
+// Force restart after DB recreation
 
 const configSchema = z.object({
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.string().transform(val => parseInt(val, 10)).optional(),
-  FLIGHT_PROVIDER_API_URL: z.string().url().default('https://api.flightprovider.com/v1'),
+  FLIGHT_PROVIDER_API_URL: z.string().url().default('https://aeroapi.flightaware.com/aeroapi'),
   FLIGHT_PROVIDER_API_KEY: z.string().default(''),
+  FLIGHTAWARE_API_KEY: z.string().default(''), // Legacy support for proxy
   TZ: z.string().default('Europe/Madrid'),
   CORS_ORIGINS: z.string().default(''),
   RATE_LIMIT_WINDOW_MS: z.string().transform(val => parseInt(val, 10)).default('900000'),
@@ -40,6 +47,9 @@ export const config = {
   flightProvider: {
     apiUrl: cfg.FLIGHT_PROVIDER_API_URL,
     apiKey: cfg.FLIGHT_PROVIDER_API_KEY,
+  },
+  flightAware: {
+    apiKey: cfg.FLIGHTAWARE_API_KEY, // Legacy support for proxy
   },
   timezone: cfg.TZ,
   corsOrigins: cfg.CORS_ORIGINS.split(',').map(o => o.trim()).filter(Boolean),

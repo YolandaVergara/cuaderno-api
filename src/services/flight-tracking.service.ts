@@ -1,8 +1,7 @@
 import { prisma } from '../config/database';
 import type { FlightTracking } from '../../node_modules/.prisma/client';
-import { $Enums } from '../../node_modules/.prisma/client';
 import { logger } from '../config/logger';
-import { FlightData, FlightChangeDetection, NotificationType } from '../types/flight';
+import { FlightData, FlightChangeDetection, NotificationType, FlightStatus, StopReason } from '../types/flight';
 import { calculatePollingInterval, calculateNextPollDate, shouldStopPolling } from '../utils/polling';
 import { IFlightProvider } from './flight-provider.service';
 import { NotificationService } from './notification.service';
@@ -44,7 +43,7 @@ export class FlightTrackingService {
         });
         
         // Retornar el tracking del usuario que lo registró
-        return trackings.find(t => t.userId === userId) || trackings[0];
+        return trackings.find(t => t.createdByUserId === userId) || trackings[0];
       }
       
       // Si no hay información del viaje, registrar solo para el usuario actual
@@ -64,13 +63,11 @@ export class FlightTrackingService {
     tripId?: string
   ): Promise<FlightTracking> {
     try {
-      // Verificar si ya existe
-      const existing = await prisma.flightTracking.findUnique({
+      // Verificar si ya existe (usando findFirst porque null en compound unique es complicado)
+      const existing = await prisma.flightTracking.findFirst({
         where: {
-          userId_flightId: {
-            userId,
-            flightId: flightData.flightId,
-          },
+          flightId: flightData.flightId,
+          tripId: tripId || null,
         },
       });
 
@@ -85,7 +82,7 @@ export class FlightTrackingService {
 
       const tracking = await prisma.flightTracking.create({
         data: {
-          userId,
+          createdByUserId: userId,
           tripId,
           flightId: flightData.flightId,
           airline: flightData.airline,
@@ -93,13 +90,13 @@ export class FlightTrackingService {
           scheduledDeparture: flightData.scheduledDeparture,
           origin: flightData.origin,
           destination: flightData.destination,
-          status: $Enums.FlightStatus.SCHEDULED,
+          status: FlightStatus.SCHEDULED,
           gate: flightData.gate,
           terminal: flightData.terminal,
           delay: 0,
           pollInterval: interval,
           nextPollAt,
-        } as any, // Temporal mientras se actualiza Prisma
+        },
       });
 
       // Check if flight is already within 6 hours - create upcoming notification immediately
@@ -190,7 +187,7 @@ export class FlightTrackingService {
           hoursUntilDeparture
         });
 
-        await this.notificationService.createUpcomingFlightNotification(tracking.userId, {
+        await this.notificationService.createUpcomingFlightNotification(tracking.createdByUserId, {
           id: tracking.id,
           flightId: tracking.flightId,
           flightNumber: tracking.flightNumber,
@@ -208,7 +205,7 @@ export class FlightTrackingService {
       // Verificar si debe parar el polling
       const stopCheck = shouldStopPolling(tracking.scheduledDeparture, tracking.status);
       if (stopCheck.shouldStop) {
-        await this.stopFlightTracking(trackingId, stopCheck.reason as $Enums.StopReason);
+        await this.stopFlightTracking(trackingId, stopCheck.reason as StopReason);
         return;
       }
 
@@ -241,7 +238,7 @@ export class FlightTrackingService {
       // Create flight update notifications using new method
       if (hoursUntilDeparture <= 6 && hoursUntilDeparture >= -2) { // Only during T-6h to T+2h window
         await this.notificationService.createFlightUpdateNotifications(
-          tracking.userId,
+          tracking.createdByUserId,
           tracking.id,
           oldData,
           newData
@@ -249,7 +246,7 @@ export class FlightTrackingService {
       } else if (changeDetection.hasChanges) {
         // Fallback to legacy notification system for flights outside T-6h window
         await this.notificationService.createNotificationsForChanges(
-          tracking.userId,
+          tracking.createdByUserId,
           tracking.id,
           changeDetection.changes
         );
@@ -331,7 +328,7 @@ export class FlightTrackingService {
     }
 
     // Cancelación
-    if (newData.status === $Enums.FlightStatus.CANCELLED && currentTracking.status !== $Enums.FlightStatus.CANCELLED) {
+    if (newData.status === FlightStatus.CANCELLED && currentTracking.status !== FlightStatus.CANCELLED) {
       changes.push({
         type: NotificationType.FLIGHT_CANCELLED,
         field: 'status',
@@ -423,7 +420,7 @@ export class FlightTrackingService {
   /**
    * Detiene el seguimiento de un vuelo
    */
-  async stopFlightTracking(trackingId: string, reason: $Enums.StopReason): Promise<void> {
+  async stopFlightTracking(trackingId: string, reason: StopReason): Promise<void> {
     try {
       await prisma.flightTracking.update({
         where: { id: trackingId },
@@ -449,12 +446,12 @@ export class FlightTrackingService {
       const result = await prisma.flightTracking.updateMany({
         where: {
           id: trackingId,
-          userId,
+          createdByUserId: userId,
           isActive: true,
         },
         data: {
           isActive: false,
-          stopReason: $Enums.StopReason.USER_CANCELLED,
+          stopReason: StopReason.USER_CANCELLED,
           updatedAt: new Date(),
         },
       });
@@ -474,7 +471,7 @@ export class FlightTrackingService {
     try {
       return await prisma.flightTracking.findMany({
         where: {
-          userId,
+          createdByUserId: userId,
           isActive: true,
         },
         orderBy: {
@@ -520,7 +517,7 @@ export class FlightTrackingService {
     try {
       return await prisma.flightTracking.findFirst({
         where: {
-          userId,
+          createdByUserId: userId,
           flightId,
           isActive: true,
         },

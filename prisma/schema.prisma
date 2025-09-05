@@ -17,16 +17,17 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  flightTracking   FlightTracking[]
-  notifications    Notification[]
-  pushSubscriptions PushSubscription[]
+  createdFlightTrackings FlightTracking[] @relation("CreatedFlightTrackings")
+  flightSubscriptions    FlightSubscription[]
+  notifications          Notification[]
+  pushSubscriptions      PushSubscription[]
 
   @@map("users")
 }
 
 model FlightTracking {
   id              String           @id @default(cuid())
-  userId          String
+  createdByUserId String           // Usuario que creó el tracking
   tripId          String?          // ID del viaje al que pertenece este vuelo
   flightId        String           // Identificador del vuelo (e.g., "AA123-2024-08-26")
   airline         String
@@ -34,12 +35,12 @@ model FlightTracking {
   scheduledDeparture DateTime
   origin          String
   destination     String
-  status          FlightStatus     @default(SCHEDULED)
+  status          String           @default("SCHEDULED") // FlightStatus as String
   gate            String?
   terminal        String?
   delay           Int              @default(0) // minutos de retraso
   isActive        Boolean          @default(true)
-  stopReason      StopReason?
+  stopReason      String? // StopReason as String
   lastPolledAt    DateTime?
   nextPollAt      DateTime?
   pollInterval    Int              @default(21600) // segundos (6h por defecto)
@@ -47,23 +48,46 @@ model FlightTracking {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  notifications Notification[]
+  createdByUser   User               @relation("CreatedFlightTrackings", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  subscriptions   FlightSubscription[] // Usuarios suscritos a este tracking
+  notifications   Notification[]
 
-  @@unique([userId, flightId])
-  @@index([nextPollAt, isActive])
+  // Índice único por vuelo y viaje (un tracking por vuelo por viaje)
+  @@unique([flightId, tripId])
+  @@index([isActive, nextPollAt])
   @@index([tripId])
   @@map("flight_tracking")
+}
+
+// Nueva tabla para manejar suscripciones de usuarios a vuelos
+model FlightSubscription {
+  id              String   @id @default(cuid())
+  userId          String
+  flightTrackingId String
+  tripId          String?  // Para filtrar por viaje
+  isActive        Boolean  @default(true)
+  receiveNotifications Boolean @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  flightTracking  FlightTracking @relation(fields: [flightTrackingId], references: [id], onDelete: Cascade)
+
+  // Un usuario solo puede suscribirse una vez al mismo tracking
+  @@unique([userId, flightTrackingId])
+  @@index([userId, isActive])
+  @@index([tripId])
+  @@map("flight_subscriptions")
 }
 
 model Notification {
   id                String              @id @default(cuid())
   userId            String
   flightTrackingId  String
-  type              NotificationType
+  type              String // NotificationType as String
   title             String
   message           String
-  data              Json? // datos adicionales del cambio (gate, terminal, delayMin, etc.)
+  data              String? // JSON data as String
   isRead            Boolean             @default(false)
   createdAt         DateTime            @default(now())
 
@@ -73,34 +97,6 @@ model Notification {
   @@index([userId, isRead])
   @@index([createdAt])
   @@map("notifications")
-}
-
-enum FlightStatus {
-  SCHEDULED
-  DELAYED
-  BOARDING
-  DEPARTED
-  ARRIVED
-  CANCELLED
-  DIVERTED
-}
-
-enum StopReason {
-  DEPARTED
-  CANCELLED
-  TIMEOUT
-  USER_CANCELLED
-}
-
-enum NotificationType {
-  STATUS_CHANGE
-  GATE_CHANGE
-  TERMINAL_CHANGE
-  DELAY_CHANGE
-  FLIGHT_CANCELLED
-  UPCOMING_FLIGHT
-  FLIGHT_UPDATE
-  DEPARTED
 }
 
 model PushSubscription {
