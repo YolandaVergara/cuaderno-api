@@ -75,25 +75,65 @@ app.use((req, res, next) => {
 
 // Health check endpoint con verificación de DB y Redis
 app.get('/health', async (_req, res) => {
+  const health = {
+    status: 'HEALTHY',
+    db: 'DISCONNECTED',
+    redis: 'DISCONNECTED',
+    timestamp: new Date().toISOString(),
+    version: '2.0.0-PRIVATE-DUAL-STACK',
+    port: config.port,
+    env: config.nodeEnv
+  };
+
+  let isHealthy = true;
+  
+  // Verificar DB
   try {
-    // Verificar DB (obligatorio)
     await prisma.$queryRaw`SELECT 1`;
-    
-    // Verificar Redis (obligatorio)
+    health.db = 'CONNECTED';
+    logger.info('Health check: DB connection OK');
+  } catch (dbError) {
+    health.db = `ERROR: ${(dbError as Error).message}`;
+    isHealthy = false;
+    logger.error('Health check: DB connection failed', { error: (dbError as Error).message });
+  }
+  
+  // Verificar Redis (opcional en Railway si no tienes Redis configurado)
+  try {
     await connection.ping();
-    
-    // Solo devolver 200 si AMBOS están OK
+    health.redis = 'CONNECTED';
+    logger.info('Health check: Redis connection OK');
+  } catch (redisError) {
+    health.redis = `ERROR: ${(redisError as Error).message}`;
+    // Redis es opcional - no marcar como no saludable por Redis
+    logger.warn('Health check: Redis connection failed', { error: (redisError as Error).message });
+  }
+  
+  // Responder con el status apropiado
+  if (isHealthy) {
+    health.status = 'HEALTHY';
+    res.status(200).json(health);
+  } else {
+    health.status = 'UNHEALTHY';
+    res.status(503).json(health);
+  }
+});
+
+// Healthcheck simple para Railway (solo verifica que el servidor responda)
+app.get('/healthz', async (_req, res) => {
+  try {
+    // Solo verificar DB - Redis es opcional
+    await prisma.$queryRaw`SELECT 1`;
     res.status(200).json({ 
-      status: "HEALTHY",
-      redis: "CONNECTED", 
-      db: "CONNECTED",
+      status: 'OK',
       timestamp: new Date().toISOString(),
-      version: "2.0.0-PRIVATE-DUAL-STACK" 
+      service: 'cuaderno-api'
     });
-  } catch (e) {
+  } catch (error) {
+    logger.error('Simple health check failed', { error: (error as Error).message });
     res.status(503).json({ 
-      status: "UNHEALTHY",
-      error: (e as Error).message,
+      status: 'ERROR',
+      error: (error as Error).message,
       timestamp: new Date().toISOString() 
     });
   }
@@ -230,8 +270,19 @@ async function startServer(): Promise<void> {
     const dbHost = dbUrl.match(/@([^:\/]+)/)?.[1] || 'unknown';
     logger.info('Database connection info', { 
       host: dbHost.replace(/\./g, '***'), // Mask for security
-      isRailwayInternal: dbHost.includes('railway.internal')
+      isRailwayInternal: dbHost.includes('railway.internal'),
+      port: config.port,
+      nodeEnv: config.nodeEnv
     });
+
+    // Test database connection before starting server
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      logger.info('Database connection successful');
+    } catch (dbError) {
+      logger.error('Database connection failed', { error: (dbError as Error).message });
+      // Don't exit - let Railway handle the retry
+    }
 
     // Execute migrations in production (only on API service)
     if (process.env.NODE_ENV === 'production') {
@@ -246,7 +297,7 @@ async function startServer(): Promise<void> {
       }
     }
 
-    // Solo verificar Redis, NO inicializar worker (servicio separado)
+    // Verificar Redis (opcional)
     try {
       await connection.ping();
       logger.info('Redis connection verified successfully');
@@ -256,11 +307,12 @@ async function startServer(): Promise<void> {
     }
     
     const server = app.listen(config.port, '0.0.0.0', () => {
-      logger.info('Server started', {
+      logger.info('🚀 Server started successfully', {
         port: config.port,
         nodeEnv: config.nodeEnv,
         timezone: config.timezone,
-        host: '0.0.0.0'
+        host: '0.0.0.0',
+        healthcheck: '/healthz'
       });
     });
 
