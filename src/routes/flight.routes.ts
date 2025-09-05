@@ -13,6 +13,11 @@ const execAsync = promisify(exec);
 const router = Router();
 const flightController = new FlightController();
 
+// TEMPORAL: Endpoint público para arreglar la base de datos
+router.post('/fix-db', (req: any, res: any) => flightController.fixDatabase(req, res));
+
+/**
+
 // Aplicar autenticación a todas las rutas
 router.use(authenticateUser);
 
