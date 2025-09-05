@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { FlightController } from '../controllers/flight.controller';
 import { validateRequest } from '../middleware/validation.middleware';
 import { authenticateUser } from '../middleware/auth.middleware';
@@ -7,6 +9,7 @@ import {
   CancelTrackingSchema,
 } from '../types/validation';
 
+const execAsync = promisify(exec);
 const router = Router();
 const flightController = new FlightController();
 
@@ -52,5 +55,33 @@ router.delete(
   validateRequest(CancelTrackingSchema),
   (req: any, res: any) => flightController.cancelFlightTracking(req, res)
 );
+
+// TEMPORAL: Endpoint para forzar migración
+router.post('/force-migration', async (req, res) => {
+  try {
+    console.log('🚀 Forzando migración de base de datos...');
+    
+    // Ejecutar db push
+    console.log('🗄️ Ejecutando db push...');
+    const pushResult = await execAsync('npx prisma db push --accept-data-loss');
+    console.log('Push result:', pushResult.stdout);
+    
+    res.json({
+      success: true,
+      message: 'Migration completed successfully',
+      output: pushResult.stdout
+    });
+    
+  } catch (error: any) {
+    console.error('❌ Error durante migración:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Migration failed',
+      details: error.message,
+      stdout: error.stdout,
+      stderr: error.stderr
+    });
+  }
+});
 
 export { router as flightRoutes };
