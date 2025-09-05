@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticateUser } from "../middleware/auth.middleware";
+import { authenticateUser, authenticateSSE } from "../middleware/auth.middleware";
 import { validateRequest } from "../middleware/validateRequest";
 import { GetNotificationsSchema } from "../validation/notifications.schema";
 import { NotificationController } from "../controllers/notification.controller";
@@ -29,11 +29,13 @@ router.get("/unread-count", (req, res) => controller.getUnreadCount(req, res));
 // GET /api/notifications/trips - Notificaciones por trips
 router.get("/trips", (req, res) => controller.getNotificationsByTrips(req, res));
 
-// SSE stream endpoint (no auth middleware needed here as it handles auth internally)
-router.get("/stream", (req, res, next) => {
-  // Remove auth middleware for SSE endpoint as it handles userId via query param
-  req.url = req.originalUrl;
-  next();
+// SSE stream endpoint - REQUIRES AUTHENTICATION (supports token via query param for EventSource)
+router.get("/stream", authenticateSSE, (req, res) => {
+  // Pass authenticated userId to SSE handler
+  (req as any).authenticatedUserId = (req as any).userId;
+  // Import and call SSE handler
+  const { notificationsSse } = require("../sse/notifications.sse");
+  notificationsSse(req, res);
 });
 
 // POST /api/notifications/test - Test endpoint (development only)

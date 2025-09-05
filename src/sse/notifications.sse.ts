@@ -7,19 +7,19 @@ import { connection } from '../infra/redis';
 import { logger } from '../config/logger';
 
 export const notificationsSse = async (req: Request, res: Response): Promise<void> => {
-  // Get userId from query or header
-  const userId = req.query.userId as string || req.get('x-user-id');
+  // Get userId from authenticated request (set by authenticateUser middleware)
+  const userId = (req as any).authenticatedUserId || (req as any).userId;
   
   if (!userId) {
-    res.status(400).json({ error: 'userId is required' });
+    res.status(401).json({ error: 'Authentication required for SSE notifications' });
     return;
   }
 
-  // En producción, rechazar usuarios de desarrollo/demo
+  // Extra validation: En producción, rechazar usuarios de desarrollo/demo por seguridad
   if (process.env.NODE_ENV === 'production') {
     const devUserPatterns = ['demo-user', 'test-user', 'dev-user', 'example-user'];
     if (devUserPatterns.includes(userId.toLowerCase())) {
-      logger.warn('Rejected development user in production', { userId });
+      logger.warn('Rejected development user in production SSE', { userId });
       res.status(403).json({ 
         error: 'Development users not allowed in production',
         userId 

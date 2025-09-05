@@ -103,6 +103,61 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
 }
 
 /**
+ * Middleware de autenticación para SSE que acepta token por query parameter
+ * EventSource no permite headers personalizados, así que el token viene en la URL
+ */
+export async function authenticateSSE(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    // For SSE, token comes via query parameter since EventSource doesn't support custom headers
+    const tokenFromQuery = req.query.token as string;
+    const authHeader = req.headers.authorization;
+    
+    let idToken: string | null = null;
+    
+    if (tokenFromQuery) {
+      idToken = tokenFromQuery;
+    } else if (authHeader && authHeader.startsWith('Bearer ')) {
+      idToken = authHeader.replace('Bearer ', '');
+    }
+    
+    if (!idToken) {
+      res.status(401).json({
+        error: 'Authentication required',
+        message: 'Please provide a valid Bearer token in Authorization header or token query parameter',
+      });
+      return;
+    }
+
+    // Verificar token con Firebase
+    const decodedToken = await verifyFirebaseToken(idToken);
+    
+    // Añadir información del usuario al request
+    (req as any).userId = decodedToken.uid;
+    (req as any).userEmail = decodedToken.email;
+    (req as any).firebaseUser = decodedToken;
+
+    logger.debug('SSE user authenticated successfully', {
+      uid: decodedToken.uid,
+      email: decodedToken.email,
+      route: req.path
+    });
+
+    next();
+  } catch (error) {
+    logger.warn('SSE authentication failed', { 
+      error: error instanceof Error ? error.message : 'Unknown error',
+      route: req.path,
+      userAgent: req.headers['user-agent']
+    });
+
+    res.status(401).json({
+      error: 'Authentication failed',
+      message: 'Invalid or expired token',
+    });
+  }
+}
+
+/**
  * Middleware legacy para compatibilidad durante la migración
  * TODO: Eliminar una vez migrada toda la aplicación
  */

@@ -249,10 +249,6 @@ app.get('/test/redis', async (req, res) => {
   }
 });
 
-// SSE endpoints (ANTES de las rutas API)
-app.head('/api/notifications/stream', (_req, res) => res.sendStatus(200));
-app.get('/api/notifications/stream', notificationsSse);
-
 // Debug endpoint to test SSE route
 app.get('/debug/sse-test', (_req, res) => {
   res.json({ message: 'SSE debug endpoint working', timestamp: new Date().toISOString() });
