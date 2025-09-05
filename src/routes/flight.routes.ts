@@ -56,6 +56,34 @@ router.delete(
   (req: any, res: any) => flightController.cancelFlightTracking(req, res)
 );
 
+// TEMPORAL: Endpoint público para forzar migración (sin autenticación)
+router.post('/force-migration-public', async (req, res) => {
+  try {
+    console.log('🚀 Forzando migración de base de datos...');
+    
+    // Ejecutar db push
+    console.log('🗄️ Ejecutando db push...');
+    const pushResult = await execAsync('npx prisma db push --accept-data-loss');
+    console.log('Push result:', pushResult.stdout);
+    
+    res.json({
+      success: true,
+      message: 'Migration completed successfully',
+      output: pushResult.stdout
+    });
+    
+  } catch (error: any) {
+    console.error('❌ Error durante migración:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Migration failed',
+      details: error.message,
+      stdout: error.stdout,
+      stderr: error.stderr
+    });
+  }
+});
+
 // TEMPORAL: Endpoint para forzar migración
 router.post('/force-migration', async (req, res) => {
   try {
