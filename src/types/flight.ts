@@ -1,31 +1,8 @@
-// Definimos nuestros propios enums ya que los eliminamos del schema de Prisma para compatibilidad con SQLite
-export enum FlightStatus {
-  SCHEDULED = 'SCHEDULED',
-  DELAYED = 'DELAYED',
-  BOARDING = 'BOARDING',
-  DEPARTED = 'DEPARTED',
-  ARRIVED = 'ARRIVED',
-  CANCELLED = 'CANCELLED',
-  DIVERTED = 'DIVERTED'
-}
+// Importamos los enums de Prisma
+import { FlightStatus, StopReason, NotificationType } from '@prisma/client';
 
-export enum StopReason {
-  DEPARTED = 'DEPARTED',
-  CANCELLED = 'CANCELLED',
-  TIMEOUT = 'TIMEOUT',
-  USER_CANCELLED = 'USER_CANCELLED'
-}
-
-export enum NotificationType {
-  STATUS_CHANGE = 'STATUS_CHANGE',
-  GATE_CHANGE = 'GATE_CHANGE',
-  TERMINAL_CHANGE = 'TERMINAL_CHANGE',
-  DELAY_CHANGE = 'DELAY_CHANGE',
-  FLIGHT_CANCELLED = 'FLIGHT_CANCELLED',
-  UPCOMING_FLIGHT = 'UPCOMING_FLIGHT',
-  FLIGHT_UPDATE = 'FLIGHT_UPDATE',
-  DEPARTED = 'DEPARTED'
-}
+// Re-exportamos para compatibilidad
+export { FlightStatus, StopReason, NotificationType };
 
 export interface FlightData {
   flightId: string;

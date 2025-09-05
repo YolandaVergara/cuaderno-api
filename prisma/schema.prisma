@@ -10,6 +10,34 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum FlightStatus {
+  SCHEDULED
+  DELAYED
+  BOARDING
+  DEPARTED
+  ARRIVED
+  CANCELLED
+  DIVERTED
+}
+
+enum StopReason {
+  DEPARTED
+  CANCELLED
+  TIMEOUT
+  USER_CANCELLED
+}
+
+enum NotificationType {
+  STATUS_CHANGE
+  GATE_CHANGE
+  TERMINAL_CHANGE
+  DELAY_CHANGE
+  FLIGHT_CANCELLED
+  UPCOMING_FLIGHT
+  FLIGHT_UPDATE
+  DEPARTED
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -35,12 +63,12 @@ model FlightTracking {
   scheduledDeparture DateTime
   origin          String
   destination     String
-  status          String           @default("SCHEDULED") // FlightStatus as String
+  status          FlightStatus     @default(SCHEDULED) // Usando el ENUM FlightStatus
   gate            String?
   terminal        String?
   delay           Int              @default(0) // minutos de retraso
   isActive        Boolean          @default(true)
-  stopReason      String? // StopReason as String
+  stopReason      StopReason?      // Usando el ENUM StopReason
   lastPolledAt    DateTime?
   nextPollAt      DateTime?
   pollInterval    Int              @default(21600) // segundos (6h por defecto)
@@ -84,7 +112,7 @@ model Notification {
   id                String              @id @default(cuid())
   userId            String
   flightTrackingId  String
-  type              String // NotificationType as String
+  type              NotificationType    // Usando el ENUM NotificationType
   title             String
   message           String
   data              String? // JSON data as String
