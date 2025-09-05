@@ -117,11 +117,11 @@ export class FlightTrackingService {
           destination: tracking.destination,
           scheduledDeparture: tracking.scheduledDeparture,
           status: tracking.status,
-          gate: tracking.gate || undefined,
-          terminal: tracking.terminal || undefined,
-          delay: tracking.delay
-        });
-      }
+            gate: tracking.gate || undefined,
+            terminal: tracking.terminal || undefined,
+            delay: tracking.delay
+          });
+        }
 
       logger.info('Flight tracking registered', {
         userId,
@@ -187,22 +187,22 @@ export class FlightTrackingService {
           hoursUntilDeparture
         });
 
-        await this.notificationService.createUpcomingFlightNotification(tracking.createdByUserId!, {
-          id: tracking.id,
-          flightId: tracking.flightId,
-          flightNumber: tracking.flightNumber,
-          airline: tracking.airline,
-          origin: tracking.origin,
-          destination: tracking.destination,
-          scheduledDeparture: tracking.scheduledDeparture,
-          status: tracking.status,
-          gate: tracking.gate || undefined,
-          terminal: tracking.terminal || undefined,
-          delay: tracking.delay
-        });
-      }
-
-      // Verificar si debe parar el polling
+        // Solo crear notificación si hay un usuario asociado
+        if (tracking.createdByUserId) {
+          await this.notificationService.createUpcomingFlightNotification(tracking.createdByUserId, {
+            id: tracking.id,
+            flightId: tracking.flightId,
+            flightNumber: tracking.flightNumber,
+            airline: tracking.airline,
+            origin: tracking.origin,
+            destination: tracking.destination,
+            scheduledDeparture: tracking.scheduledDeparture,
+            status: tracking.status,
+            gate: tracking.gate || undefined,
+            terminal: tracking.terminal || undefined,
+            delay: tracking.delay
+          });
+        }      // Verificar si debe parar el polling
       const stopCheck = shouldStopPolling(tracking.scheduledDeparture, tracking.status);
       if (stopCheck.shouldStop) {
         await this.stopFlightTracking(trackingId, stopCheck.reason as StopReason);
@@ -235,18 +235,18 @@ export class FlightTrackingService {
       // Detectar cambios (legacy method)
       const changeDetection = this.detectFlightChanges(tracking, response.data);
 
-      // Create flight update notifications using new method
-      if (hoursUntilDeparture <= 6 && hoursUntilDeparture >= -2) { // Only during T-6h to T+2h window
+      // Create flight update notifications using new method (solo si hay usuario)
+      if (tracking.createdByUserId && hoursUntilDeparture <= 6 && hoursUntilDeparture >= -2) { // Only during T-6h to T+2h window
         await this.notificationService.createFlightUpdateNotifications(
-          tracking.createdByUserId!,
+          tracking.createdByUserId,
           tracking.id,
           oldData,
           newData
         );
-      } else if (changeDetection.hasChanges) {
+      } else if (tracking.createdByUserId && changeDetection.hasChanges) {
         // Fallback to legacy notification system for flights outside T-6h window
         await this.notificationService.createNotificationsForChanges(
-          tracking.createdByUserId!,
+          tracking.createdByUserId,
           tracking.id,
           changeDetection.changes
         );

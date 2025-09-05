@@ -82,7 +82,7 @@ describe('Flight API Endpoints', () => {
       await prisma.flightTracking.createMany({
         data: [
           {
-            userId: testUserId,
+            createdByUserId: testUserId,
             flightId: 'AA123-2024-08-26',
             airline: 'American Airlines',
             flightNumber: 'AA123',
@@ -94,7 +94,7 @@ describe('Flight API Endpoints', () => {
             nextPollAt: new Date(),
           },
           {
-            userId: testUserId,
+            createdByUserId: testUserId,
             flightId: 'UA456-2024-08-27',
             airline: 'United Airlines',
             flightNumber: 'UA456',
@@ -145,7 +145,7 @@ describe('Flight API Endpoints', () => {
     beforeEach(async () => {
       const tracking = await prisma.flightTracking.create({
         data: {
-          userId: testUserId,
+          createdByUserId: testUserId,
           flightId: 'AA123-2024-08-26',
           airline: 'American Airlines',
           flightNumber: 'AA123',

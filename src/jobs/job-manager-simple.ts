@@ -119,7 +119,7 @@ export class JobManager {
           {
             trackingId: tracking.id,
             flightId: tracking.flightId,
-            userId: tracking.userId,
+            userId: tracking.createdByUserId!,
           },
           {
             delay,

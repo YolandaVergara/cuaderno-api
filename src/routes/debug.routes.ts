@@ -111,7 +111,7 @@ router.post('/force-poll/:trackingId', async (req, res) => {
       await jobManager.scheduleFlightPollingJob(
         trackingId,
         tracking.flightId,
-        tracking.createdByUserId,
+        tracking.createdByUserId!,
         delay
       );
     }
@@ -151,7 +151,7 @@ router.get('/flight-tracking/:trackingId', async (req, res) => {
     // Obtener notificaciones relacionadas
     const notifications = await prisma.notification.findMany({
       where: {
-        userId: tracking.createdByUserId,
+        userId: tracking.createdByUserId || undefined,
         // Buscar por flightNumber en el título o mensaje
         OR: [
           {
