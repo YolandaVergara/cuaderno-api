@@ -15,9 +15,7 @@ router.use('/push', pushRoutes);
 // FlightAware proxy routes (for frontend compatibility)
 router.use('/', flightAwareRoutes);
 
-// Rutas de debug (solo en desarrollo)
-if (process.env.NODE_ENV !== 'production') {
-  router.use('/debug', debugRoutes);
-}
+// Rutas de debug (temporalmente habilitadas en producción para migración)
+router.use('/debug', debugRoutes);
 
 export { router as apiRoutes };
