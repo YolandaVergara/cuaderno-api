@@ -82,7 +82,7 @@ export class FlightTrackingService {
 
       const tracking = await prisma.flightTracking.create({
         data: {
-          createdByUserId: userId,
+          createdByUserId: userId || null,
           tripId,
           flightId: flightData.flightId,
           airline: flightData.airline,

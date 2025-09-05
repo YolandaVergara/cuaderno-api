@@ -3,8 +3,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 
 import { config } from './config/config';
 import { logger } from './config/logger';
@@ -16,8 +14,6 @@ import { notificationsSse } from './sse/notifications.sse';
 
 // Cargar variables de entorno
 dotenv.config();
-
-const execAsync = promisify(exec);
 
 
 const app = express();
@@ -218,34 +214,6 @@ app.get('/api/notifications/stream', notificationsSse);
 // Debug endpoint to test SSE route
 app.get('/debug/sse-test', (_req, res) => {
   res.json({ message: 'SSE debug endpoint working', timestamp: new Date().toISOString() });
-});
-
-// TEMPORAL: Endpoint público para migración de base de datos
-app.post('/force-migration', async (req, res) => {
-  try {
-    logger.info('🚀 Forzando migración de base de datos...');
-    
-    // Ejecutar db push
-    logger.info('🗄️ Ejecutando db push...');
-    const pushResult = await execAsync('npx prisma db push --accept-data-loss');
-    logger.info('Push result:', pushResult.stdout);
-    
-    res.json({
-      success: true,
-      message: 'Migration completed successfully',
-      output: pushResult.stdout
-    });
-    
-  } catch (error: any) {
-    logger.error('❌ Error durante migración:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Migration failed',
-      details: error.message,
-      stdout: error.stdout,
-      stderr: error.stderr
-    });
-  }
 });
 
 // Rutas de la API

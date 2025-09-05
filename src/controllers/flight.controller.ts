@@ -21,33 +21,6 @@ export class FlightController {
   }
 
   /**
-   * TEMPORAL: Endpoint para arreglar la base de datos
-   */
-  async fixDatabase(req: Request, res: Response): Promise<void> {
-    try {
-      const { exec } = require('child_process');
-      const { promisify } = require('util');
-      const execAsync = promisify(exec);
-      
-      // Forzar actualización del esquema
-      const result = await execAsync('npx prisma db push --accept-data-loss --force-reset');
-      
-      res.json({
-        success: true,
-        message: 'Database fixed successfully',
-        output: result.stdout
-      });
-      
-    } catch (error: any) {
-      logger.error('Failed to fix database', { error });
-      res.status(500).json({
-        error: 'Failed to fix database',
-        details: error.message
-      });
-    }
-  }
-
-  /**
    * Registra un vuelo para seguimiento
    */
   async registerFlightTracking(
