@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 import { JobManager } from '../jobs/job-manager';
@@ -6,6 +8,7 @@ import { FlightTrackingService } from '../services/flight-tracking.service';
 import { NotificationService } from '../services/notification.service';
 import { createFlightProvider } from '../services/flight-provider.service';
 
+const execAsync = promisify(exec);
 const router = Router();
 
 // Instancia del job manager para debugging
@@ -293,6 +296,66 @@ router.get('/system-status', async (req, res) => {
   } catch (error) {
     logger.error('Error getting system status', { error });
     res.status(500).json({ error: String(error) });
+  }
+});
+
+// Endpoint temporal para forzar migración de base de datos
+router.post('/force-migration', async (req, res) => {
+  try {
+    console.log('🚀 Forzando migración de base de datos...');
+    
+    // Primero generar el cliente de Prisma
+    console.log('📦 Generando cliente de Prisma...');
+    const generateResult = await execAsync('npx prisma generate');
+    console.log('Generate result:', generateResult.stdout);
+    
+    // Luego ejecutar db push
+    console.log('🗄️ Ejecutando db push...');
+    const pushResult = await execAsync('npx prisma db push --accept-data-loss');
+    console.log('Push result:', pushResult.stdout);
+    
+    res.json({
+      success: true,
+      message: 'Migration completed successfully',
+      generateOutput: generateResult.stdout,
+      pushOutput: pushResult.stdout
+    });
+    
+  } catch (error: any) {
+    console.error('❌ Error durante migración:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Migration failed',
+      details: error.message,
+      stdout: error.stdout,
+      stderr: error.stderr
+    });
+  }
+});
+
+// Endpoint para verificar el esquema de la base de datos
+router.get('/check-schema', async (req, res) => {
+  try {
+    // Intentar hacer una consulta simple para verificar si la tabla existe
+    const result = await prisma.$queryRaw`
+      SELECT column_name, data_type 
+      FROM information_schema.columns 
+      WHERE table_name = 'flight_tracking'
+      ORDER BY ordinal_position;
+    `;
+    
+    res.json({
+      success: true,
+      columns: result
+    });
+    
+  } catch (error: any) {
+    console.error('❌ Error verificando esquema:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Schema check failed',
+      details: error.message
+    });
   }
 });
 
