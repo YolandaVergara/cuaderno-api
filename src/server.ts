@@ -156,8 +156,9 @@ app.get('/health-test', async (_req, res) => {
   }
 });
 
-// Test endpoint para crear un seguimiento de vuelo
-app.post('/test/flight-tracking', async (req, res) => {
+// Test endpoint para crear un seguimiento de vuelo (solo en desarrollo)
+if (process.env.NODE_ENV !== 'production') {
+  app.post('/test/flight-tracking', async (req, res) => {
   try {
     const { flightId, hours = 24 } = req.body;
     
@@ -195,7 +196,8 @@ app.post('/test/flight-tracking', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }
-});
+  });
+}
 
 // Test endpoints para verificar rutas sin autenticación
 app.get('/test/routes', (req, res) => {

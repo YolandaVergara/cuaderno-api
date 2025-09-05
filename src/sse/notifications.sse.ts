@@ -15,6 +15,19 @@ export const notificationsSse = async (req: Request, res: Response): Promise<voi
     return;
   }
 
+  // En producción, rechazar usuarios de desarrollo/demo
+  if (process.env.NODE_ENV === 'production') {
+    const devUserPatterns = ['demo-user', 'test-user', 'dev-user', 'example-user'];
+    if (devUserPatterns.includes(userId.toLowerCase())) {
+      logger.warn('Rejected development user in production', { userId });
+      res.status(403).json({ 
+        error: 'Development users not allowed in production',
+        userId 
+      });
+      return;
+    }
+  }
+
   // Set SSE headers
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
