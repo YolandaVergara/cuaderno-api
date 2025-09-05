@@ -2,6 +2,7 @@
 
 # Script de inicio para Railway
 # Ejecuta migraciones solo en el servicio api-node
+# Updated to ensure database migrations run correctly
 
 echo "🚀 Iniciando servicio: ${RAILWAY_SERVICE_NAME:-unknown}"
 
