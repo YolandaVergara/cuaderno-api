@@ -187,7 +187,9 @@ export class FlightTrackingService {
           hoursUntilDeparture
         });
 
-        await this.notificationService.createUpcomingFlightNotification(tracking.createdByUserId!, {
+        // Solo crear notificación si hay un usuario asociado
+        if (tracking.createdByUserId) {
+          await this.notificationService.createUpcomingFlightNotification(tracking.createdByUserId, {
           id: tracking.id,
           flightId: tracking.flightId,
           flightNumber: tracking.flightNumber,
@@ -200,6 +202,7 @@ export class FlightTrackingService {
           terminal: tracking.terminal || undefined,
           delay: tracking.delay
         });
+        }
       }
 
       // Verificar si debe parar el polling
@@ -236,17 +239,17 @@ export class FlightTrackingService {
       const changeDetection = this.detectFlightChanges(tracking, response.data);
 
       // Create flight update notifications using new method
-      if (hoursUntilDeparture <= 6 && hoursUntilDeparture >= -2) { // Only during T-6h to T+2h window
+      if (tracking.createdByUserId && hoursUntilDeparture <= 6 && hoursUntilDeparture >= -2) { // Only during T-6h to T+2h window
         await this.notificationService.createFlightUpdateNotifications(
-          tracking.createdByUserId!,
+          tracking.createdByUserId,
           tracking.id,
           oldData,
           newData
         );
-      } else if (changeDetection.hasChanges) {
+      } else if (tracking.createdByUserId && changeDetection.hasChanges) {
         // Fallback to legacy notification system for flights outside T-6h window
         await this.notificationService.createNotificationsForChanges(
-          tracking.createdByUserId!,
+          tracking.createdByUserId,
           tracking.id,
           changeDetection.changes
         );
