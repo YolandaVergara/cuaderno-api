@@ -1,8 +1,31 @@
-// Importamos los enums de Prisma
-import { FlightStatus, StopReason, NotificationType } from '@prisma/client';
+// Definimos nuestros propios enums para compatibilidad
+export enum FlightStatus {
+  SCHEDULED = 'SCHEDULED',
+  DELAYED = 'DELAYED',
+  BOARDING = 'BOARDING',
+  DEPARTED = 'DEPARTED',
+  ARRIVED = 'ARRIVED',
+  CANCELLED = 'CANCELLED',
+  DIVERTED = 'DIVERTED'
+}
 
-// Re-exportamos para compatibilidad
-export { FlightStatus, StopReason, NotificationType };
+export enum StopReason {
+  DEPARTED = 'DEPARTED',
+  CANCELLED = 'CANCELLED',
+  TIMEOUT = 'TIMEOUT',
+  USER_CANCELLED = 'USER_CANCELLED'
+}
+
+export enum NotificationType {
+  STATUS_CHANGE = 'STATUS_CHANGE',
+  GATE_CHANGE = 'GATE_CHANGE',
+  TERMINAL_CHANGE = 'TERMINAL_CHANGE',
+  DELAY_CHANGE = 'DELAY_CHANGE',
+  FLIGHT_CANCELLED = 'FLIGHT_CANCELLED',
+  UPCOMING_FLIGHT = 'UPCOMING_FLIGHT',
+  FLIGHT_UPDATE = 'FLIGHT_UPDATE',
+  DEPARTED = 'DEPARTED'
+}
 
 export interface FlightData {
   flightId: string;
