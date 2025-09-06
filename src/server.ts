@@ -32,7 +32,9 @@ const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').map(o => o.tr
 // Default allowed origins for production
 const defaultAllowedOrigins = [
   'https://www.pasaporteando.net',
-  'https://pasaporteando.net'
+  'https://pasaporteando.net',
+  'https://cuaderno-donde-pise-cmyzpffxx-yols-projects.vercel.app',
+  'https://cuaderno-donde-pise.vercel.app'
 ];
 
 const finalAllowedOrigins = allowedOrigins.length > 0 ? allowedOrigins : defaultAllowedOrigins;
