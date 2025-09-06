@@ -35,6 +35,7 @@ const defaultAllowedOrigins = [
   'https://pasaporteando.net',
   'https://cuaderno-donde-pise-cmyzpffxx-yols-projects.vercel.app',
   'https://cuaderno-donde-pise-ohr8k4l9j-yols-projects.vercel.app',
+  'https://cuaderno-donde-pise-om289gp5f-yols-projects.vercel.app',
   'https://cuaderno-donde-pise.vercel.app'
 ];
 
