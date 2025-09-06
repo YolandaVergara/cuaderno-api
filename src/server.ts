@@ -26,19 +26,30 @@ if (process.env.TRUST_PROXY === '1' || process.env.NODE_ENV === 'production') {
 // Middleware de seguridad
 app.use(helmet());
 
-// CORS seguro: permite solo orígenes definidos en producción
-const allowedOrigins = (process.env.CORS_ORIGIN || '').split(',').map(o => o.trim()).filter(Boolean);
+// CORS configuration: Allow specific origins in production
+const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
+
+// Default allowed origins for production
+const defaultAllowedOrigins = [
+  'https://www.pasaporteando.net',
+  'https://pasaporteando.net'
+];
+
+const finalAllowedOrigins = allowedOrigins.length > 0 ? allowedOrigins : defaultAllowedOrigins;
+
 app.use(cors({
   origin: (origin, callback) => {
-    // En desarrollo o si no hay origin (ej: Postman), permitir
+    // En desarrollo o si no hay origin (ej: Postman, server-to-server), permitir
     if (process.env.NODE_ENV === 'development' || !origin) {
       callback(null, true);
-    } else if (allowedOrigins.length === 0) {
-      // En prod sin CORS_ORIGIN configurado, rechazar
-      callback(new Error('CORS_ORIGIN not configured in production'));
-    } else if (allowedOrigins.includes(origin)) {
+    } else if (finalAllowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      logger.warn('CORS origin not allowed:', { 
+        origin, 
+        allowedOrigins: finalAllowedOrigins,
+        userAgent: origin ? 'browser' : 'server-to-server'
+      });
       callback(new Error('Not allowed by CORS'));
     }
   },
