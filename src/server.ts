@@ -268,10 +268,7 @@ app.get('/debug/sse-test', (_req, res) => {
 });
 
 // Rutas de la API
-console.log('🔍 DEBUG: Mounting API routes...', typeof apiRoutes);
-console.log('🔍 DEBUG: apiRoutes available:', Object.keys(apiRoutes));
 app.use('/api', apiRoutes);
-console.log('🔍 DEBUG: API routes mounted successfully');
 
 // Middleware de manejo de errores
 app.use(notFoundHandler);
