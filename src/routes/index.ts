@@ -7,24 +7,6 @@ import { flightAwareRoutes } from './flightaware.routes';
 
 const router = Router();
 
-// Test route to verify API mounting
-router.get('/test', (req, res) => {
-  res.json({
-    message: 'API routes working',
-    availableRoutes: [
-      'GET /api/test',
-      'GET /api/flight/trackings', 
-      'GET /api/flight/by-date',
-      'GET /api/flight/:flightId',
-      'POST /api/flight',
-      'DELETE /api/flight',
-      'GET /api/notifications',
-      'POST /api/push'
-    ],
-    timestamp: new Date().toISOString()
-  });
-});
-
 // Rutas de la API
 router.use('/flight', flightRoutes);  // Cambiado a singular como especifica el requirement
 router.use('/notifications', notificationRoutes);
