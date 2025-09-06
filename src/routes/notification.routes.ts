@@ -7,7 +7,17 @@ import { NotificationController } from "../controllers/notification.controller";
 const router = Router();
 const controller = new NotificationController();
 
-// Autenticación para todas las rutas
+// SSE stream endpoint - REQUIRES AUTHENTICATION (supports token via query param for EventSource)
+// MUST be defined BEFORE the global auth middleware
+router.get("/stream", authenticateSSE, (req, res) => {
+  // Pass authenticated userId to SSE handler
+  (req as any).authenticatedUserId = (req as any).userId;
+  // Import and call SSE handler
+  const { notificationsSse } = require("../sse/notifications.sse");
+  notificationsSse(req, res);
+});
+
+// Autenticación para el resto de las rutas (después de definir SSE)
 router.use(authenticateUser);
 
 // GET /api/notifications - CON VALIDACIÓN
@@ -28,15 +38,6 @@ router.get("/unread-count", (req, res) => controller.getUnreadCount(req, res));
 
 // GET /api/notifications/trips - Notificaciones por trips
 router.get("/trips", (req, res) => controller.getNotificationsByTrips(req, res));
-
-// SSE stream endpoint - REQUIRES AUTHENTICATION (supports token via query param for EventSource)
-router.get("/stream", authenticateSSE, (req, res) => {
-  // Pass authenticated userId to SSE handler
-  (req as any).authenticatedUserId = (req as any).userId;
-  // Import and call SSE handler
-  const { notificationsSse } = require("../sse/notifications.sse");
-  notificationsSse(req, res);
-});
 
 // POST /api/notifications/test - Test endpoint (development only)
 if (process.env.NODE_ENV !== 'production') {
